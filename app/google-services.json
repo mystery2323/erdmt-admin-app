@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "690941744376",
+    "firebase_url": "https://radiant-works-461812-q5-default-rtdb.firebaseio.com",
+    "project_id": "radiant-works-461812-q5",
+    "storage_bucket": "radiant-works-461812-q5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:690941744376:android:09c3170e902586044c170d",
+        "android_client_info": {
+          "package_name": "com.yourdomain.erdmt"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4hI_nink_JZH2JkqylZQqmuh4cH9pGOo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
