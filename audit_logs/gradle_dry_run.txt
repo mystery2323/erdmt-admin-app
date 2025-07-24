@@ -1,0 +1,31 @@
+Starting a Gradle Daemon, 1 incompatible and 1 stopped Daemons could not be reused, use --status for details
+Calculating task graph as no cached configuration is available for tasks: assembleDebug
+
+> Configure project :app
+e: file:///data/data/com.termux/files/home/erdmt-admin-app/app/build.gradle.kts:3:11: Unresolved reference: libs
+e: file:///data/data/com.termux/files/home/erdmt-admin-app/app/build.gradle.kts:4:11: Unresolved reference: libs
+
+FAILURE: Build failed with an exception.
+
+* Where:
+Build file '/data/data/com.termux/files/home/erdmt-admin-app/app/build.gradle.kts' line: 3
+
+* What went wrong:
+Script compilation errors:
+
+  Line 3:     alias(libs.plugins.android.application)
+                    ^ Unresolved reference: libs
+
+  Line 4:     alias(libs.plugins.kotlin.android)
+                    ^ Unresolved reference: libs
+
+2 errors
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 17s
+Configuration cache entry stored.

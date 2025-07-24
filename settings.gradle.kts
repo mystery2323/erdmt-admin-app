@@ -14,4 +14,3 @@ dependencyResolutionManagement {
 }
 rootProject.name = "ERDMT"
 include(":app")
-    versionCatalogs { create("libs") { from(files("gradle/libs.versions.toml")) } }

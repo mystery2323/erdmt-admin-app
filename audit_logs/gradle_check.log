@@ -1,0 +1,3 @@
+✔️  Root build.gradle.kts found.
+✔️  App module build.gradle.kts found.
+❌ Gradle dry-run failed. Check audit_logs/gradle_dry_run.txt

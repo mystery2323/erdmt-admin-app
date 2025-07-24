@@ -1,0 +1,57 @@
+app/src/main/AndroidManifest.xml:        <!-- Firebase Messaging Service -->
+app/src/main/AndroidManifest.xml:                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+app/src/main/java/com/yourdomain/erdmt/AudioRecorder.kt:import com.google.firebase.storage.FirebaseStorage
+app/src/main/java/com/yourdomain/erdmt/AudioRecorder.kt:    fun uploadToFirebase(filePath: String, deviceId: String, callback: (Boolean, String?) -> Unit) {
+app/src/main/java/com/yourdomain/erdmt/AudioRecorder.kt:        val storage = FirebaseStorage.getInstance()
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:import com.google.firebase.database.*
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:import com.google.firebase.storage.FirebaseStorage
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:    private lateinit var database: FirebaseDatabase
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:    private lateinit var storage: FirebaseStorage
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:        initializeFirebase()
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:    private fun initializeFirebase() {
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:        database = FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:        storage = FirebaseStorage.getInstance()
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:        // Log to Firebase
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:        logToFirebase("info", "Background service processed command: $commandType")
+app/src/main/java/com/yourdomain/erdmt/BackgroundService.kt:    private fun logToFirebase(level: String, message: String) {
+app/src/main/java/com/yourdomain/erdmt/BootReceiver.kt:            // Log to Firebase (if possible)
+app/src/main/java/com/yourdomain/erdmt/BootReceiver.kt:                val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/BootReceiver.kt:                    "timestamp" to com.google.firebase.database.ServerValue.TIMESTAMP,
+app/src/main/java/com/yourdomain/erdmt/BootReceiver.kt:                Log.e(TAG, "Failed to log boot event to Firebase", e)
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:import com.google.firebase.analytics.FirebaseAnalytics
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:import com.google.firebase.database.*
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:import com.google.firebase.storage.FirebaseStorage
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:    private lateinit var firebaseAnalytics: FirebaseAnalytics
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:    private lateinit var database: FirebaseDatabase
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:    private lateinit var storage: FirebaseStorage
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:        initializeFirebase()
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:    private fun initializeFirebase() {
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:            firebaseAnalytics = FirebaseAnalytics.getInstance(this)
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:            database = FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:            storage = FirebaseStorage.getInstance()
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:            // Register device in Firebase
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:            Log.e("MainActivity", "Firebase initialization failed", e)
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:import com.google.firebase.FirebaseApp
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:import com.google.firebase.database.FirebaseDatabase
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:import com.google.firebase.messaging.FirebaseMessaging
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:    private lateinit var database: FirebaseDatabase
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:        initializeFirebase()
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:    private fun initializeFirebase() {
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:        if (FirebaseApp.getApps(this).isEmpty()) {
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:            FirebaseApp.initializeApp(this)
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:        database = FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/MainActivity.kt:        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:import com.google.firebase.messaging.FirebaseMessagingService
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:import com.google.firebase.messaging.RemoteMessage
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:import com.google.firebase.database.FirebaseDatabase
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:class RemoteCommandService : FirebaseMessagingService() {
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:    private val database = FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:        // Send token to Firebase Database
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:        // Store command in Firebase for MainActivity to pick up
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:import com.google.firebase.messaging.FirebaseMessagingService
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:import com.google.firebase.messaging.RemoteMessage
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:import com.google.firebase.database.FirebaseDatabase
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:class RemoteCommandService : FirebaseMessagingService() {
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:        val database = FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:        val database = FirebaseDatabase.getInstance()
+app/src/main/java/com/yourdomain/erdmt/RemoteCommandService.kt:        FirebaseDatabase.getInstance().reference.child("devices").child(deviceId).child("fcmToken").setValue(token)
