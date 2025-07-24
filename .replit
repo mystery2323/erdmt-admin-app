@@ -2,3 +2,15 @@ modules = ["nodejs-20", "web"]
 
 [nix]
 channel = "stable-25_05"
+
+[workflows]
+runButton = "Serve Admin Panel"
+
+[[workflows.workflow]]
+name = "Serve Admin Panel"
+author = 45330160
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd admin-panel && python -m http.server 5000"
