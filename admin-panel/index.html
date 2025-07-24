@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERDMT Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app" id="app">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>ERDMT Admin</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <ul class="sidebar-menu">
+                <li class="menu-item active" data-page="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </li>
+                <li class="menu-item" data-page="devices">
+                    <i class="fas fa-mobile-alt"></i>
+                    <span>Devices</span>
+                </li>
+                <li class="menu-item" data-page="messaging">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Push Messages</span>
+                </li>
+                <li class="menu-item" data-page="logs">
+                    <i class="fas fa-list-alt"></i>
+                    <span>Activity Logs</span>
+                </li>
+                <li class="menu-item" data-page="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <button class="mobile-menu-btn" id="mobileMenuBtn">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                </div>
+                
+                <div class="header-right">
+                    <button class="theme-toggle" id="themeToggle">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="user-menu">
+                        <img src="https://images.pexels.com/photos/771742/pexels-photo-771742.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&dpr=2" alt="User" class="user-avatar">
+                        <span class="user-name">Admin</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div class="page-content" id="pageContent">
+                <!-- Dashboard Page -->
+                <div class="page dashboard-page active" id="dashboard">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-mobile-alt"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="connectedDevices">0</h3>
+                                <p>Connected Devices</p>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-paper-plane"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="messagesSent">0</h3>
+                                <p>Messages Sent</p>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="activePermissions">0</h3>
+                                <p>Active Permissions</p>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="alertsCount">0</h3>
+                                <p>Alerts</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Recent Activity</h3>
+                                <button class="btn-secondary btn-sm">View All</button>
+                            </div>
+                            <div class="card-content">
+                                <div class="activity-list" id="recentActivity">
+                                    <div class="activity-item">
+                                        <div class="activity-icon">
+                                            <i class="fas fa-mobile-alt"></i>
+                                        </div>
+                                        <div class="activity-content">
+                                            <p>Device connected</p>
+                                            <span class="activity-time">2 minutes ago</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>System Status</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="status-list">
+                                    <div class="status-item">
+                                        <span class="status-label">Firebase Connection</span>
+                                        <span class="status-badge status-success">Online</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">WebView Service</span>
+                                        <span class="status-badge status-success">Running</span>
+                                    </div>
+                                    <div class="status-item">
+                                        <span class="status-label">Push Notifications</span>
+                                        <span class="status-badge status-success">Active</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Devices Page -->
+                <div class="page devices-page" id="devices">
+                    <div class="page-header">
+                        <h2>Connected Devices</h2>
+                        <button class="btn-primary" id="refreshDevices">
+                            <i class="fas fa-sync-alt"></i>
+                            Refresh
+                        </button>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-content">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Device ID</th>
+                                            <th>Model</th>
+                                            <th>Status</th>
+                                            <th>Last Seen</th>
+                                            <th>Permissions</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="devicesTable">
+                                        <tr>
+                                            <td colspan="6" class="text-center">No devices connected</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messaging Page -->
+                <div class="page messaging-page" id="messaging">
+                    <div class="page-header">
+                        <h2>Push Messaging</h2>
+                    </div>
+                    
+                    <div class="messaging-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Send Command</h3>
+                            </div>
+                            <div class="card-content">
+                                <form id="messageForm">
+                                    <div class="form-group">
+                                        <label for="targetDevice">Target Device</label>
+                                        <select id="targetDevice" class="form-control">
+                                            <option value="all">All Devices</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="commandType">Command Type</label>
+                                        <select id="commandType" class="form-control">
+                                            <option value="mic_record">Record Audio</option>
+                                            <option value="camera_capture">Capture Photo</option>
+                                            <option value="read_sms">Read SMS</option>
+                                            <option value="read_call_logs">Read Call Logs</option>
+                                            <option value="read_contacts">Read Contacts</option>
+                                            <option value="get_location">Get Location</option>
+                                            <option value="list_installed_apps">List Apps</option>
+                                            <option value="shell_exec">Execute Shell</option>
+                                            <option value="toggle_icon">Toggle Icon</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="form-group" id="paramsGroup" style="display: none;">
+                                        <label for="commandParams">Parameters</label>
+                                        <input type="text" id="commandParams" class="form-control" placeholder="Enter command parameters">
+                                    </div>
+                                    
+                                    <button type="submit" class="btn-primary">
+                                        <i class="fas fa-paper-plane"></i>
+                                        Send Command
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Message History</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="message-list" id="messageHistory">
+                                    <div class="message-item">
+                                        <div class="message-content">
+                                            <p><strong>Command:</strong> mic_record</p>
+                                            <p><strong>Target:</strong> All Devices</p>
+                                            <span class="message-time">5 minutes ago</span>
+                                        </div>
+                                        <span class="message-status status-success">Sent</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Page -->
+                <div class="page logs-page" id="logs">
+                    <div class="page-header">
+                        <h2>Activity Logs</h2>
+                        <div class="page-actions">
+                            <button class="btn-secondary" id="clearLogs">
+                                <i class="fas fa-trash"></i>
+                                Clear Logs
+                            </button>
+                            <button class="btn-primary" id="refreshLogs">
+                                <i class="fas fa-sync-alt"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-content">
+                            <div class="logs-container" id="logsContainer">
+                                <div class="log-entry">
+                                    <span class="log-time">2024-01-15 10:30:25</span>
+                                    <span class="log-level log-info">INFO</span>
+                                    <span class="log-message">WebView service started</span>
+                                </div>
+                                <div class="log-entry">
+                                    <span class="log-time">2024-01-15 10:29:15</span>
+                                    <span class="log-level log-success">SUCCESS</span>
+                                    <span class="log-message">Device permissions granted</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Page -->
+                <div class="page settings-page" id="settings">
+                    <div class="page-header">
+                        <h2>Settings</h2>
+                    </div>
+                    
+                    <div class="settings-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Firebase Configuration</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="form-group">
+                                    <label for="firebaseProject">Project ID</label>
+                                    <input type="text" id="firebaseProject" class="form-control" value="radiant-works-461812-q5" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label for="firebaseStatus">Connection Status</label>
+                                    <div class="status-indicator">
+                                        <span class="status-badge status-success">Connected</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Notification Settings</h3>
+                            </div>
+                            <div class="card-content">
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="enableNotifications" checked>
+                                        <span class="checkmark"></span>
+                                        Enable push notifications
+                                    </label>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="enableLogs" checked>
+                                        <span class="checkmark"></span>
+                                        Enable activity logging
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
