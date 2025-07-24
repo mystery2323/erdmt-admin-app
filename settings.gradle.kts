@@ -7,7 +7,6 @@ pluginManagement {
 }
 dependencyResolutionManagement {
 
-    versionCatalogs { create("libs") { from(files("gradle/libs.versions.toml")) } }
     repositories {
         google()
         mavenCentral()
@@ -15,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "ERDMT"
 include(":app")
+    versionCatalogs { create("libs") { from(files("gradle/libs.versions.toml")) } }
