@@ -5,201 +5,215 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ERDMT Admin - Login</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-
-        .login-container {
+        
+        .login-card {
+            max-width: 400px;
+            width: 100%;
             background: white;
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
+            overflow: hidden;
         }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 30px;
-        }
-
-        .logo i {
-            font-size: 48px;
-            color: #667eea;
-            margin-right: 15px;
-        }
-
-        .logo h1 {
-            font-size: 28px;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .login-form {
-            margin-top: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #555;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .login-btn {
-            width: 100%;
-            padding: 12px;
+        
+        .login-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .login-header i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .login-body {
+            padding: 2rem;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
             border-radius: 10px;
-            font-size: 16px;
+            padding: 12px;
             font-weight: 600;
-            cursor: pointer;
             transition: transform 0.2s;
         }
-
-        .login-btn:hover {
+        
+        .btn-login:hover {
             transform: translateY(-2px);
         }
-
-        .login-btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+        
+        .loading-spinner {
+            display: none;
         }
-
+        
         .error-message {
-            color: #e74c3c;
-            margin-top: 15px;
             display: none;
-        }
-
-        .loading {
-            display: none;
-            margin-top: 15px;
-        }
-
-        .loading i {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            margin-top: 1rem;
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="logo">
+    <div class="login-card">
+        <div class="login-header">
             <i class="fas fa-shield-alt"></i>
-            <h1>ERDMT Admin</h1>
+            <h2>ERDMT Admin</h2>
+            <p class="mb-0">Enhanced Remote Device Management</p>
         </div>
         
-        <p>Sign in to access the admin panel</p>
-        
-        <form class="login-form" id="loginForm">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" required>
-            </div>
-            
-            <button type="submit" class="login-btn" id="loginBtn">
-                Sign In
-            </button>
-            
-            <div class="loading" id="loading">
-                <i class="fas fa-spinner"></i> Signing in...
-            </div>
-            
-            <div class="error-message" id="errorMessage"></div>
-        </form>
+        <div class="login-body">
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label for="email" class="form-label">
+                        <i class="fas fa-envelope me-2"></i>Email Address
+                    </label>
+                    <input type="email" class="form-control" id="email" required 
+                           placeholder="Enter your email">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="password" class="form-label">
+                        <i class="fas fa-lock me-2"></i>Password
+                    </label>
+                    <input type="password" class="form-control" id="password" required 
+                           placeholder="Enter your password">
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-login w-100" id="loginBtn">
+                    <span class="login-text">
+                        <i class="fas fa-sign-in-alt me-2"></i>Sign In
+                    </span>
+                    <span class="loading-spinner">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Signing in...
+                    </span>
+                </button>
+                
+                <div class="alert alert-danger error-message" id="errorMessage" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <span id="errorText"></span>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <small class="text-muted">
+                        For authorized administrators only
+                    </small>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics-compat.js"></script>
     
+    <!-- Firebase Config -->
     <script src="firebase-config.js"></script>
+    
     <script>
+        // Initialize Firebase Auth
+        const auth = firebase.auth();
+        
+        // Check if user is already logged in
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // User is logged in, redirect to dashboard
+                window.location.href = 'index.html';
+            }
+        });
+        
+        // Handle login form submission
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const loginBtn = document.getElementById('loginBtn');
-            const loading = document.getElementById('loading');
+            const loginText = document.querySelector('.login-text');
+            const loadingSpinner = document.querySelector('.loading-spinner');
             const errorMessage = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
             
-            // Reset UI
-            errorMessage.style.display = 'none';
+            // Show loading state
             loginBtn.disabled = true;
-            loading.style.display = 'block';
+            loginText.style.display = 'none';
+            loadingSpinner.style.display = 'inline';
+            errorMessage.style.display = 'none';
             
             try {
+                // Sign in with Firebase
                 await auth.signInWithEmailAndPassword(email, password);
-                // Redirect to dashboard
-                window.location.href = 'index.html';
+                
+                // Success - user will be redirected by onAuthStateChanged
+                console.log('Login successful');
+                
             } catch (error) {
-                errorMessage.textContent = error.message;
+                // Handle login errors
+                console.error('Login error:', error);
+                
+                let errorMsg = 'Login failed. Please try again.';
+                
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                        errorMsg = 'No account found with this email address.';
+                        break;
+                    case 'auth/wrong-password':
+                        errorMsg = 'Incorrect password. Please try again.';
+                        break;
+                    case 'auth/invalid-email':
+                        errorMsg = 'Invalid email address format.';
+                        break;
+                    case 'auth/user-disabled':
+                        errorMsg = 'This account has been disabled.';
+                        break;
+                    case 'auth/too-many-requests':
+                        errorMsg = 'Too many failed attempts. Please try again later.';
+                        break;
+                    default:
+                        errorMsg = error.message;
+                }
+                
+                errorText.textContent = errorMsg;
                 errorMessage.style.display = 'block';
+                
             } finally {
+                // Reset button state
                 loginBtn.disabled = false;
-                loading.style.display = 'none';
+                loginText.style.display = 'inline';
+                loadingSpinner.style.display = 'none';
             }
         });
-
-        // Check if user is already logged in
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                window.location.href = 'index.html';
-            }
+        
+        // Show password toggle (optional enhancement)
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordField = document.getElementById('password');
+            
+            // Add show/hide password functionality
+            passwordField.addEventListener('input', function() {
+                if (this.value.length > 0) {
+                    this.style.backgroundImage = 'url("data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\' fill=\'%23212529\'%3e%3cpath d=\'M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zM7 6a1 1 0 1 1 2 0v2a1 1 0 1 1-2 0V6z\'/%3e%3c/svg%3e")';
+                }
+            });
         });
     </script>
 </body>

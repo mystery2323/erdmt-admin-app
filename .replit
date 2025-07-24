@@ -13,4 +13,4 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd admin-panel && python -m http.server 5000"
+args = "cd admin-panel && python3 -m http.server 5000"

@@ -1,547 +1,850 @@
 
 // Global variables
-let devices = {};
-let commandCount = 0;
-let responseCount = 0;
-let mediaCount = 0;
-let currentPage = 'dashboard';
+let currentUser = null;
+let devices = new Map();
+let commandHistory = [];
+let logs = [];
+let mediaFiles = [];
 
-// Initialize app
-document.addEventListener('DOMContentLoaded', function() {
+// Firebase references
+let db, auth, storage;
+let devicesRef, commandsRef, responsesRef, logsRef;
+
+// Initialize when DOM is loaded
+$(document).ready(function() {
+    initializeFirebase();
     initializeAuth();
     initializeEventListeners();
+    
+    // Show dashboard by default
+    showPage('dashboard');
 });
 
-// Authentication
+/**
+ * Initialize Firebase services and references
+ */
+function initializeFirebase() {
+    try {
+        // Initialize Firebase services
+        auth = firebase.auth();
+        db = firebase.database();
+        storage = firebase.storage();
+        
+        // Initialize database references
+        devicesRef = db.ref('devices');
+        commandsRef = db.ref('commands');
+        responsesRef = db.ref('responses');
+        logsRef = db.ref('logs');
+        
+        updateConnectionStatus('connected', 'Connected to Firebase');
+        console.log('Firebase initialized successfully');
+        
+    } catch (error) {
+        console.error('Firebase initialization error:', error);
+        updateConnectionStatus('error', 'Firebase connection failed: ' + error.message);
+    }
+}
+
+/**
+ * Initialize authentication state listener
+ */
 function initializeAuth() {
     auth.onAuthStateChanged(user => {
         if (user) {
             currentUser = user;
-            showMainApp();
-            startListeners();
+            $('#userEmail').text(user.email);
+            
+            // Setup real-time listeners after authentication
+            setupRealtimeListeners();
+            
+            // Load initial data
+            loadDashboardData();
+            
+            console.log('User authenticated:', user.email);
         } else {
-            showLoginPage();
+            // User not authenticated, redirect to login
+            window.location.href = 'login.html';
         }
     });
 }
 
-function showLoginPage() {
-    document.getElementById('loginPage').classList.remove('d-none');
-    document.getElementById('mainApp').classList.add('d-none');
-}
-
-function showMainApp() {
-    document.getElementById('loginPage').classList.add('d-none');
-    document.getElementById('mainApp').classList.remove('d-none');
-    document.getElementById('userEmail').textContent = currentUser.email;
-    showPage('dashboard');
-}
-
-// Event Listeners
-function initializeEventListeners() {
-    // Login form
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+/**
+ * Setup real-time Firebase listeners
+ */
+function setupRealtimeListeners() {
+    // Listen for device changes
+    devicesRef.on('value', snapshot => {
+        devices.clear();
+        if (snapshot.exists()) {
+            snapshot.forEach(child => {
+                const device = child.val();
+                device.id = child.key;
+                devices.set(child.key, device);
+            });
+        }
+        updateDevicesUI();
+        updateDashboardStats();
+        updateDeviceSelect();
+    }, error => {
+        console.error('Devices listener error:', error);
+        showToast('Error loading devices: ' + error.message, 'danger');
+    });
     
-    // Command form
-    document.getElementById('commandForm').addEventListener('submit', handleCommandSubmit);
+    // Listen for new responses
+    responsesRef.on('child_added', snapshot => {
+        const response = snapshot.val();
+        if (response) {
+            console.log('New response:', response);
+            
+            // Add to logs
+            addLog('response', `Response from ${response.deviceId}: ${response.message}`, 'info');
+            
+            // Handle media files
+            if (response.fileUrl) {
+                handleMediaFile(response);
+            }
+            
+            // Show toast notification
+            showToast(`Response from ${response.deviceId}`, 'success');
+        }
+    });
+    
+    // Listen for logs
+    logsRef.limitToLast(100).on('value', snapshot => {
+        logs = [];
+        if (snapshot.exists()) {
+            snapshot.forEach(child => {
+                logs.push({
+                    id: child.key,
+                    ...child.val()
+                });
+            });
+        }
+        updateLogsUI();
+    }, error => {
+        console.error('Logs listener error:', error);
+    });
+}
+
+/**
+ * Initialize event listeners
+ */
+function initializeEventListeners() {
+    // Command form submission
+    $('#commandForm').on('submit', function(e) {
+        e.preventDefault();
+        sendCommand();
+    });
     
     // Command type change
-    document.getElementById('commandType').addEventListener('change', handleCommandTypeChange);
-}
-
-async function handleLogin(e) {
-    e.preventDefault();
-    
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const loginBtn = document.getElementById('loginBtn');
-    const loginError = document.getElementById('loginError');
-    
-    // Show loading
-    loginBtn.disabled = true;
-    loginBtn.querySelector('.spinner-border').classList.remove('d-none');
-    loginError.classList.add('d-none');
-    
-    try {
-        await auth.signInWithEmailAndPassword(email, password);
-        showToast('Successfully logged in!', 'success');
-    } catch (error) {
-        loginError.textContent = error.message;
-        loginError.classList.remove('d-none');
-    } finally {
-        loginBtn.disabled = false;
-        loginBtn.querySelector('.spinner-border').classList.add('d-none');
-    }
-}
-
-function logout() {
-    auth.signOut();
-    showToast('Logged out successfully', 'info');
-}
-
-// Page Navigation
-function showPage(pageId) {
-    // Hide all pages
-    document.querySelectorAll('.page-content').forEach(page => {
-        page.classList.add('d-none');
-    });
-    
-    // Remove active from nav links
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('active');
-    });
-    
-    // Show target page
-    document.getElementById(pageId + 'Page').classList.remove('d-none');
-    
-    // Add active to nav link
-    event.target.classList.add('active');
-    
-    currentPage = pageId;
-    
-    // Load page data
-    switch(pageId) {
-        case 'dashboard':
-            loadDashboard();
-            break;
-        case 'logs':
-            loadLogs();
-            break;
-        case 'media':
-            loadMedia();
-            break;
-    }
-}
-
-// Firebase Listeners
-function startListeners() {
-    // Listen to devices
-    devicesRef.on('value', (snapshot) => {
-        devices = snapshot.val() || {};
-        updateDevicesList();
-        updateStats();
-    });
-    
-    // Listen to logs
-    logsRef.limitToLast(100).on('value', (snapshot) => {
-        if (currentPage === 'logs') {
-            displayLogs(snapshot.val() || {});
+    $('#commandType').on('change', function() {
+        const commandType = $(this).val();
+        const paramsGroup = $('#paramsGroup');
+        const paramsInput = $('#commandParams');
+        
+        // Show parameters field for specific commands
+        if (commandType === 'shell_exec') {
+            paramsGroup.show();
+            paramsInput.attr('placeholder', 'Enter shell command (e.g., ls -la)');
+        } else if (commandType === 'toggle_icon') {
+            paramsGroup.show();
+            paramsInput.attr('placeholder', 'Enter "show" or "hide"');
+        } else {
+            paramsGroup.hide();
         }
     });
     
-    // Listen to responses for each device
-    Object.keys(devices).forEach(deviceId => {
-        database.ref(`responses/${deviceId}`).limitToLast(10).on('value', (snapshot) => {
-            displayRecentResponses(deviceId, snapshot.val() || {});
-        });
+    // Log search
+    $('#logSearch').on('input', function() {
+        const searchTerm = $(this).val().toLowerCase();
+        filterLogs(searchTerm);
     });
 }
 
-// Dashboard Functions
-function loadDashboard() {
-    updateDevicesList();
-    updateCommandSelect();
-    updateStats();
-    loadRecentResponses();
-}
-
-function updateStats() {
-    const deviceCount = Object.keys(devices).length;
-    document.getElementById('deviceCount').textContent = deviceCount;
-    document.getElementById('commandCount').textContent = commandCount;
-    document.getElementById('responseCount').textContent = responseCount;
-    document.getElementById('mediaCount').textContent = mediaCount;
-}
-
-function updateDevicesList() {
-    const tbody = document.getElementById('devicesTable');
+/**
+ * Show specific page and update navigation
+ */
+function showPage(pageId) {
+    // Hide all pages
+    $('.page').hide();
     
-    if (Object.keys(devices).length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No devices connected</td></tr>';
+    // Show selected page
+    $('#' + pageId).show();
+    
+    // Update navigation
+    $('.nav-link').removeClass('active');
+    $('.nav-link').each(function() {
+        if ($(this).attr('onclick') && $(this).attr('onclick').includes(pageId)) {
+            $(this).addClass('active');
+        }
+    });
+    
+    // Load page-specific data
+    switch (pageId) {
+        case 'dashboard':
+            loadDashboardData();
+            break;
+        case 'devices':
+            refreshDevices();
+            break;
+        case 'commands':
+            updateDeviceSelect();
+            loadCommandHistory();
+            break;
+        case 'logs':
+            refreshLogs();
+            break;
+        case 'media':
+            refreshMedia();
+            break;
+    }
+}
+
+/**
+ * Load dashboard data and update stats
+ */
+function loadDashboardData() {
+    updateDashboardStats();
+    updateRecentActivity();
+    updateOnlineDevicesList();
+}
+
+/**
+ * Update dashboard statistics
+ */
+function updateDashboardStats() {
+    const deviceCount = devices.size;
+    const onlineCount = Array.from(devices.values()).filter(d => d.online).length;
+    
+    // Count commands from last 24 hours
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    const recentCommands = commandHistory.filter(cmd => cmd.timestamp > oneDayAgo).length;
+    
+    $('#deviceCount').text(deviceCount);
+    $('#onlineCount').text(onlineCount);
+    $('#commandCount').text(recentCommands);
+    $('#mediaCount').text(mediaFiles.length);
+}
+
+/**
+ * Update recent activity display
+ */
+function updateRecentActivity() {
+    const recentLogs = logs.slice(-10).reverse();
+    const container = $('#recentActivity');
+    
+    if (recentLogs.length === 0) {
+        container.html('<div class="text-muted text-center">No recent activity</div>');
         return;
     }
     
-    tbody.innerHTML = Object.entries(devices).map(([deviceId, device]) => `
+    const activityHtml = recentLogs.map(log => `
+        <div class="d-flex align-items-center mb-2 p-2 border-bottom">
+            <i class="fas ${getLogIcon(log.type)} me-3 text-${getLogColor(log.level)}"></i>
+            <div class="flex-grow-1">
+                <div class="fw-bold">${log.message}</div>
+                <small class="text-muted">${formatTimeAgo(log.timestamp)}</small>
+            </div>
+        </div>
+    `).join('');
+    
+    container.html(activityHtml);
+}
+
+/**
+ * Update online devices list
+ */
+function updateOnlineDevicesList() {
+    const onlineDevices = Array.from(devices.values()).filter(d => d.online);
+    const container = $('#onlineDevices');
+    
+    if (onlineDevices.length === 0) {
+        container.html('<div class="text-muted text-center">No devices online</div>');
+        return;
+    }
+    
+    const devicesHtml = onlineDevices.map(device => `
+        <div class="d-flex align-items-center justify-content-between mb-2 p-2 bg-light rounded">
+            <div>
+                <div class="fw-bold">${device.model || 'Unknown Model'}</div>
+                <small class="text-muted">${device.id}</small>
+            </div>
+            <span class="badge bg-success">Online</span>
+        </div>
+    `).join('');
+    
+    container.html(devicesHtml);
+}
+
+/**
+ * Update devices table
+ */
+function updateDevicesUI() {
+    const tbody = $('#devicesTable');
+    
+    if (devices.size === 0) {
+        tbody.html('<tr><td colspan="7" class="text-center text-muted">No devices connected</td></tr>');
+        return;
+    }
+    
+    const deviceRows = Array.from(devices.entries()).map(([id, device]) => `
         <tr>
+            <td><code>${id}</code></td>
+            <td>${device.model || 'Unknown'}</td>
             <td>
-                <code>${deviceId}</code>
-                <span class="badge ${device.online ? 'status-online' : 'status-offline'} ms-2">
+                <span class="badge bg-${device.online ? 'success' : 'secondary'}">
                     ${device.online ? 'Online' : 'Offline'}
                 </span>
             </td>
-            <td>${device.model || 'Unknown'}</td>
+            <td>${device.battery ? device.battery + '%' : 'N/A'}</td>
+            <td>${device.location ? `${device.location.lat}, ${device.location.lng}` : 'N/A'}</td>
+            <td>${device.lastSeen ? formatTimeAgo(device.lastSeen) : 'Never'}</td>
             <td>
-                ${device.battery ? `
-                    <div class="progress" style="width: 60px; height: 8px;">
-                        <div class="progress-bar ${getBatteryColor(device.battery)}" 
-                             style="width: ${device.battery}%"></div>
-                    </div>
-                    <small class="text-muted">${device.battery}%</small>
-                ` : 'N/A'}
-            </td>
-            <td>
-                ${device.location ? `
-                    <small>
-                        <i class="fas fa-map-marker-alt"></i>
-                        ${device.location.lat?.toFixed(4)}, ${device.location.lng?.toFixed(4)}
-                    </small>
-                ` : 'N/A'}
-            </td>
-            <td>
-                <small class="text-muted">${formatTimestamp(device.lastSeen)}</small>
-            </td>
-            <td>
-                <button class="btn btn-sm btn-primary me-1" onclick="viewDevice('${deviceId}')">
-                    <i class="fas fa-eye"></i>
+                <button class="btn btn-primary btn-sm" onclick="selectDeviceForCommand('${id}')">
+                    <i class="fas fa-paper-plane"></i> Command
                 </button>
-                <button class="btn btn-sm btn-success" onclick="selectDevice('${deviceId}')">
-                    <i class="fas fa-bullseye"></i>
+                <button class="btn btn-danger btn-sm" onclick="removeDevice('${id}')">
+                    <i class="fas fa-trash"></i> Remove
                 </button>
             </td>
         </tr>
     `).join('');
+    
+    tbody.html(deviceRows);
 }
 
-function updateCommandSelect() {
-    const select = document.getElementById('targetDevice');
-    select.innerHTML = '<option value="">Select Device</option>';
+/**
+ * Update device select dropdown
+ */
+function updateDeviceSelect() {
+    const select = $('#targetDevice');
+    const currentValue = select.val();
     
-    Object.entries(devices).forEach(([deviceId, device]) => {
-        if (device.online) {
-            select.innerHTML += `<option value="${deviceId}">${device.model || 'Unknown'} (${deviceId})</option>`;
-        }
+    select.empty();
+    select.append('<option value="">Select device...</option>');
+    select.append('<option value="all">All Devices</option>');
+    
+    devices.forEach((device, id) => {
+        select.append(`<option value="${id}">${device.model || 'Unknown'} (${id})</option>`);
     });
-}
-
-function getBatteryColor(battery) {
-    if (battery > 50) return 'bg-success';
-    if (battery > 20) return 'bg-warning';
-    return 'bg-danger';
-}
-
-// Command Handling
-function handleCommandTypeChange() {
-    const commandType = document.getElementById('commandType').value;
-    const paramsGroup = document.getElementById('paramsGroup');
-    const paramsInput = document.getElementById('commandParams');
     
-    if (commandType === 'shell_exec') {
-        paramsGroup.style.display = 'block';
-        paramsInput.placeholder = 'Enter shell command (e.g., ls -la)';
-        paramsInput.required = true;
-    } else if (commandType === 'toggle_icon') {
-        paramsGroup.style.display = 'block';
-        paramsInput.placeholder = 'Enter "show" or "hide"';
-        paramsInput.required = true;
-    } else {
-        paramsGroup.style.display = 'none';
-        paramsInput.required = false;
+    // Restore previous selection if it still exists
+    if (currentValue && (currentValue === 'all' || devices.has(currentValue))) {
+        select.val(currentValue);
     }
 }
 
-async function handleCommandSubmit(e) {
-    e.preventDefault();
+/**
+ * Send command to device(s)
+ */
+function sendCommand() {
+    const targetDevice = $('#targetDevice').val();
+    const commandType = $('#commandType').val();
+    const commandParams = $('#commandParams').val();
     
-    const targetDevice = document.getElementById('targetDevice').value;
-    const commandType = document.getElementById('commandType').value;
-    const commandParams = document.getElementById('commandParams').value;
-    
-    if (!targetDevice) {
-        showToast('Please select a target device', 'error');
+    if (!targetDevice || !commandType) {
+        showToast('Please select target device and command type', 'warning');
         return;
     }
     
     const command = {
-        command: commandType,
+        type: commandType,
         params: commandParams || null,
-        timestamp: firebase.database.ServerValue.TIMESTAMP,
-        id: Date.now().toString()
+        timestamp: Date.now(),
+        sender: currentUser.email,
+        status: 'sent'
     };
     
-    try {
-        await database.ref(`commands/${targetDevice}`).push(command);
-        
-        // Log the command
-        await database.ref('logs').push({
-            level: 'info',
-            message: `Command "${commandType}" sent to device ${targetDevice}`,
-            timestamp: firebase.database.ServerValue.TIMESTAMP,
-            deviceId: targetDevice
+    // Show loading state
+    const submitBtn = $('#commandForm button[type="submit"]');
+    const originalText = submitBtn.html();
+    submitBtn.html('<i class="fas fa-spinner fa-spin me-2"></i>Sending...').prop('disabled', true);
+    
+    if (targetDevice === 'all') {
+        // Send to all devices
+        const promises = [];
+        devices.forEach((device, deviceId) => {
+            promises.push(sendCommandToDevice(deviceId, command));
         });
         
-        commandCount++;
-        updateStats();
-        
-        showToast(`Command "${commandType}" sent successfully!`, 'success');
-        document.getElementById('commandForm').reset();
-        document.getElementById('paramsGroup').style.display = 'none';
-        
-    } catch (error) {
-        console.error('Error sending command:', error);
-        showToast('Error sending command: ' + error.message, 'error');
-    }
-}
-
-function selectDevice(deviceId) {
-    document.getElementById('targetDevice').value = deviceId;
-    showToast(`Device ${deviceId} selected for commands`, 'info');
-}
-
-function viewDevice(deviceId) {
-    const device = devices[deviceId];
-    if (!device) return;
-    
-    let details = `Device ID: ${deviceId}\n`;
-    details += `Model: ${device.model || 'Unknown'}\n`;
-    details += `Status: ${device.online ? 'Online' : 'Offline'}\n`;
-    details += `Battery: ${device.battery || 'N/A'}%\n`;
-    details += `Last Seen: ${formatTimestamp(device.lastSeen)}\n`;
-    
-    if (device.location) {
-        details += `Location: ${device.location.lat}, ${device.location.lng}\n`;
-    }
-    
-    alert(details);
-}
-
-// Recent Responses
-function loadRecentResponses() {
-    Object.keys(devices).forEach(deviceId => {
-        database.ref(`responses/${deviceId}`).limitToLast(5).once('value', (snapshot) => {
-            displayRecentResponses(deviceId, snapshot.val() || {});
+        Promise.all(promises).then(() => {
+            showToast(`Command sent to all ${devices.size} devices`, 'success');
+            addToCommandHistory(targetDevice, command);
+        }).catch(error => {
+            console.error('Error sending commands:', error);
+            showToast('Error sending commands to some devices', 'danger');
+        }).finally(() => {
+            submitBtn.html(originalText).prop('disabled', false);
         });
-    });
+        
+    } else {
+        // Send to specific device
+        sendCommandToDevice(targetDevice, command).then(() => {
+            showToast(`Command sent to ${targetDevice}`, 'success');
+            addToCommandHistory(targetDevice, command);
+        }).catch(error => {
+            console.error('Error sending command:', error);
+            showToast('Error sending command: ' + error.message, 'danger');
+        }).finally(() => {
+            submitBtn.html(originalText).prop('disabled', false);
+        });
+    }
+    
+    // Reset form
+    $('#commandForm')[0].reset();
+    $('#paramsGroup').hide();
 }
 
-function displayRecentResponses(deviceId, responses) {
-    const container = document.getElementById('recentResponses');
-    const responseEntries = Object.entries(responses).slice(-10).reverse();
+/**
+ * Send command to specific device
+ */
+function sendCommandToDevice(deviceId, command) {
+    return commandsRef.child(deviceId).push(command);
+}
+
+/**
+ * Add command to history
+ */
+function addToCommandHistory(target, command) {
+    const historyItem = {
+        target: target,
+        command: command,
+        timestamp: Date.now()
+    };
     
-    if (responseEntries.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center">No responses yet</p>';
+    commandHistory.push(historyItem);
+    
+    // Keep only last 50 commands
+    if (commandHistory.length > 50) {
+        commandHistory = commandHistory.slice(-50);
+    }
+    
+    // Add to logs
+    addLog('command', `Command "${command.type}" sent to ${target === 'all' ? 'all devices' : target}`, 'info');
+    
+    // Update UI
+    loadCommandHistory();
+}
+
+/**
+ * Load and display command history
+ */
+function loadCommandHistory() {
+    const container = $('#commandHistory');
+    
+    if (commandHistory.length === 0) {
+        container.html('<div class="text-muted text-center">No commands sent yet</div>');
         return;
     }
     
-    container.innerHTML = responseEntries.map(([responseId, response]) => `
-        <div class="response-item fade-in">
-            <div class="response-meta">
-                <strong>${deviceId}</strong> • ${formatTimestamp(response.timestamp)}
+    const historyHtml = commandHistory.slice(-10).reverse().map(item => `
+        <div class="border-bottom pb-2 mb-2">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <strong>${item.command.type}</strong>
+                    <div class="text-muted small">Target: ${item.target === 'all' ? 'All Devices' : item.target}</div>
+                    ${item.command.params ? `<div class="text-muted small">Params: ${item.command.params}</div>` : ''}
+                </div>
+                <small class="text-muted">${formatTimeAgo(item.timestamp)}</small>
             </div>
-            <div><strong>Command:</strong> ${response.command}</div>
-            ${response.data ? `<div class="response-data">${JSON.stringify(response.data, null, 2)}</div>` : ''}
         </div>
     `).join('');
     
-    responseCount = responseEntries.length;
-    updateStats();
+    container.html(historyHtml);
 }
 
-// Logs Functions
-function loadLogs() {
-    logsRef.limitToLast(100).once('value', (snapshot) => {
-        displayLogs(snapshot.val() || {});
+/**
+ * Update logs display
+ */
+function updateLogsUI() {
+    const container = $('#logsContainer');
+    
+    if (logs.length === 0) {
+        container.html('<div class="text-muted text-center">No logs available</div>');
+        return;
+    }
+    
+    const sortedLogs = logs.slice().reverse();
+    const logsHtml = sortedLogs.map(log => `
+        <div class="log-entry mb-1" data-log-content="${log.message.toLowerCase()}">
+            <span class="text-muted me-3">${new Date(log.timestamp).toLocaleString()}</span>
+            <span class="badge bg-${getLogColor(log.level)} me-3">${log.level.toUpperCase()}</span>
+            <span class="log-message">${log.message}</span>
+        </div>
+    `).join('');
+    
+    container.html(logsHtml);
+}
+
+/**
+ * Filter logs based on search term
+ */
+function filterLogs(searchTerm) {
+    const logEntries = $('.log-entry');
+    
+    if (!searchTerm) {
+        logEntries.show();
+        return;
+    }
+    
+    logEntries.each(function() {
+        const logContent = $(this).data('log-content');
+        if (logContent.includes(searchTerm)) {
+            $(this).show();
+        } else {
+            $(this).hide();
+        }
     });
 }
 
-function displayLogs(logs) {
-    const container = document.getElementById('logsContainer');
-    const logEntries = Object.entries(logs).sort((a, b) => b[1].timestamp - a[1].timestamp);
+/**
+ * Add log entry
+ */
+function addLog(type, message, level = 'info') {
+    const logEntry = {
+        type: type,
+        message: message,
+        level: level,
+        timestamp: Date.now(),
+        deviceId: 'admin-panel'
+    };
     
-    if (logEntries.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center">No logs available</p>';
-        return;
-    }
-    
-    container.innerHTML = logEntries.map(([logId, log]) => `
-        <div class="log-entry">
-            <div class="log-timestamp">${formatTimestamp(log.timestamp)}</div>
-            <div class="log-level ${log.level}">${log.level.toUpperCase()}</div>
-            <div class="log-message">${log.message}</div>
-        </div>
-    `).join('');
+    logsRef.push(logEntry).catch(error => {
+        console.error('Error adding log:', error);
+    });
 }
 
-function refreshLogs() {
-    document.getElementById('logsContainer').classList.add('loading');
-    loadLogs();
-    setTimeout(() => {
-        document.getElementById('logsContainer').classList.remove('loading');
-        showToast('Logs refreshed', 'info');
-    }, 1000);
-}
-
-async function clearLogs() {
-    if (confirm('Are you sure you want to clear all logs?')) {
-        try {
-            await logsRef.remove();
-            document.getElementById('logsContainer').innerHTML = '<p class="text-muted text-center">No logs available</p>';
+/**
+ * Clear all logs
+ */
+function clearLogs() {
+    if (confirm('Are you sure you want to clear all logs? This action cannot be undone.')) {
+        logsRef.remove().then(() => {
             showToast('Logs cleared successfully', 'success');
-        } catch (error) {
-            showToast('Error clearing logs: ' + error.message, 'error');
-        }
+        }).catch(error => {
+            console.error('Error clearing logs:', error);
+            showToast('Error clearing logs: ' + error.message, 'danger');
+        });
     }
 }
 
-// Media Functions
-async function loadMedia() {
-    try {
-        const storageRef = storage.ref();
-        const result = await storageRef.listAll();
-        
-        const mediaItems = [];
-        
-        for (const itemRef of result.items) {
-            try {
-                const url = await itemRef.getDownloadURL();
-                const metadata = await itemRef.getMetadata();
-                
-                mediaItems.push({
-                    name: itemRef.name,
-                    url: url,
-                    size: metadata.size,
-                    timeCreated: metadata.timeCreated,
-                    contentType: metadata.contentType
-                });
-            } catch (error) {
-                console.error('Error getting media item:', error);
-            }
-        }
-        
-        displayMedia(mediaItems);
-        mediaCount = mediaItems.length;
-        updateStats();
-        
-    } catch (error) {
-        console.error('Error loading media:', error);
-        showToast('Error loading media: ' + error.message, 'error');
-    }
-}
-
-function displayMedia(mediaItems) {
-    const container = document.getElementById('mediaGrid');
+/**
+ * Handle media file from response
+ */
+function handleMediaFile(response) {
+    const mediaFile = {
+        id: Date.now().toString(),
+        name: response.fileName || 'Unknown file',
+        url: response.fileUrl,
+        type: response.fileType || 'application/octet-stream',
+        timestamp: response.timestamp || Date.now(),
+        deviceId: response.deviceId
+    };
     
-    if (mediaItems.length === 0) {
-        container.innerHTML = '<div class="col-12 text-center text-muted"><p>No media files found</p></div>';
+    mediaFiles.push(mediaFile);
+    updateDashboardStats();
+}
+
+/**
+ * Refresh media files from Firebase Storage
+ */
+function refreshMedia() {
+    const container = $('#mediaGrid');
+    container.html('<div class="col-12 text-center"><i class="fas fa-spinner fa-spin"></i> Loading media files...</div>');
+    
+    // Load images
+    const storageRef = storage.ref();
+    const imagesRef = storageRef.child('images');
+    const audioRef = storageRef.child('audio');
+    
+    Promise.all([
+        loadMediaFromRef(imagesRef, 'image'),
+        loadMediaFromRef(audioRef, 'audio')
+    ]).then(() => {
+        updateMediaUI();
+    }).catch(error => {
+        console.error('Error loading media:', error);
+        container.html('<div class="col-12 text-center text-danger">Error loading media files</div>');
+    });
+}
+
+/**
+ * Load media files from storage reference
+ */
+function loadMediaFromRef(ref, type) {
+    return ref.listAll().then(result => {
+        const promises = result.items.map(item => {
+            return item.getDownloadURL().then(url => {
+                const mediaFile = {
+                    id: item.name,
+                    name: item.name,
+                    url: url,
+                    type: type,
+                    timestamp: Date.now()
+                };
+                
+                // Check if already exists
+                const existingIndex = mediaFiles.findIndex(f => f.id === item.name);
+                if (existingIndex >= 0) {
+                    mediaFiles[existingIndex] = mediaFile;
+                } else {
+                    mediaFiles.push(mediaFile);
+                }
+            });
+        });
+        
+        return Promise.all(promises);
+    });
+}
+
+/**
+ * Update media UI
+ */
+function updateMediaUI() {
+    const container = $('#mediaGrid');
+    
+    if (mediaFiles.length === 0) {
+        container.html('<div class="col-12 text-center text-muted">No media files found</div>');
         return;
     }
     
-    container.innerHTML = mediaItems.map(item => {
-        const isImage = item.contentType?.startsWith('image/');
-        const isVideo = item.contentType?.startsWith('video/');
-        const isAudio = item.contentType?.startsWith('audio/');
-        
-        return `
-            <div class="col-md-4 col-lg-3 mb-3">
-                <div class="media-item">
-                    ${isImage ? `
-                        <img src="${item.url}" alt="${item.name}" onclick="openMedia('${item.url}', '${item.name}')">
-                    ` : isVideo ? `
-                        <video controls onclick="openMedia('${item.url}', '${item.name}')">
-                            <source src="${item.url}" type="${item.contentType}">
-                        </video>
-                    ` : isAudio ? `
-                        <div class="audio-placeholder d-flex align-items-center justify-content-center bg-light" style="height: 200px;">
-                            <div class="text-center">
-                                <i class="fas fa-music fa-3x text-muted mb-2"></i>
-                                <div class="fw-bold">${item.name}</div>
-                                <audio controls class="mt-2">
-                                    <source src="${item.url}" type="${item.contentType}">
-                                </audio>
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="file-placeholder d-flex align-items-center justify-content-center bg-light" style="height: 200px;">
-                            <div class="text-center">
-                                <i class="fas fa-file fa-3x text-muted mb-2"></i>
-                                <div class="fw-bold">${item.name}</div>
-                            </div>
-                        </div>
-                    `}
-                    
-                    <div class="media-overlay">
-                        <div class="fw-bold">${item.name}</div>
-                        <small>${formatFileSize(item.size)} • ${formatTimestamp(item.timeCreated)}</small>
-                        <div class="mt-2">
-                            <button class="btn btn-sm btn-light me-1" onclick="downloadMedia('${item.url}', '${item.name}')">
-                                <i class="fas fa-download"></i>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteMedia('${item.name}')">
-                                <i class="fas fa-trash"></i>
-                            </button>
+    const mediaHtml = mediaFiles.map(file => {
+        if (file.type === 'image' || file.name.match(/\.(jpg|jpeg|png|gif)$/i)) {
+            return `
+                <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                    <div class="card">
+                        <img src="${file.url}" class="card-img-top" style="height: 200px; object-fit: cover; cursor: pointer;" 
+                             onclick="viewMedia('${file.url}', '${file.name}')">
+                        <div class="card-body">
+                            <h6 class="card-title">${file.name}</h6>
+                            <p class="card-text small text-muted">${formatTimeAgo(file.timestamp)}</p>
+                            <a href="${file.url}" class="btn btn-primary btn-sm" target="_blank">
+                                <i class="fas fa-external-link-alt"></i> View
+                            </a>
                         </div>
                     </div>
                 </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function openMedia(url, name) {
-    window.open(url, '_blank');
-}
-
-function downloadMedia(url, name) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = name;
-    a.click();
-}
-
-async function deleteMedia(fileName) {
-    if (confirm(`Are you sure you want to delete ${fileName}?`)) {
-        try {
-            await storage.ref(fileName).delete();
-            showToast('Media file deleted successfully', 'success');
-            loadMedia();
-        } catch (error) {
-            showToast('Error deleting file: ' + error.message, 'error');
+            `;
+        } else {
+            return `
+                <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <i class="fas fa-file-audio fa-3x text-muted mb-3"></i>
+                            <h6 class="card-title">${file.name}</h6>
+                            <p class="card-text small text-muted">${formatTimeAgo(file.timestamp)}</p>
+                            <audio controls class="w-100 mb-2">
+                                <source src="${file.url}" type="audio/mpeg">
+                                Your browser does not support the audio element.
+                            </audio>
+                            <a href="${file.url}" class="btn btn-primary btn-sm" target="_blank">
+                                <i class="fas fa-download"></i> Download
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
+    }).join('');
+    
+    container.html(mediaHtml);
+}
+
+/**
+ * View media in modal
+ */
+function viewMedia(url, name) {
+    // Create modal dynamically
+    const modal = $(`
+        <div class="modal fade" id="mediaModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${name}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body text-center">
+                        <img src="${url}" class="img-fluid" alt="${name}">
+                    </div>
+                    <div class="modal-footer">
+                        <a href="${url}" class="btn btn-primary" target="_blank">
+                            <i class="fas fa-external-link-alt"></i> Open in New Tab
+                        </a>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `);
+    
+    $('body').append(modal);
+    const bsModal = new bootstrap.Modal(modal[0]);
+    bsModal.show();
+    
+    // Remove modal when hidden
+    modal.on('hidden.bs.modal', function() {
+        modal.remove();
+    });
+}
+
+/**
+ * Refresh functions for each page
+ */
+function refreshDevices() {
+    // Devices are updated in real-time, just show loading briefly
+    const tbody = $('#devicesTable');
+    tbody.html('<tr><td colspan="7" class="text-center"><i class="fas fa-spinner fa-spin"></i> Refreshing...</td></tr>');
+    
+    setTimeout(() => {
+        updateDevicesUI();
+    }, 500);
+}
+
+function refreshLogs() {
+    const container = $('#logsContainer');
+    container.html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Refreshing logs...</div>');
+    
+    setTimeout(() => {
+        updateLogsUI();
+    }, 500);
+}
+
+/**
+ * Device management functions
+ */
+function selectDeviceForCommand(deviceId) {
+    showPage('commands');
+    $('#targetDevice').val(deviceId);
+}
+
+function removeDevice(deviceId) {
+    if (confirm(`Are you sure you want to remove device ${deviceId}?`)) {
+        devicesRef.child(deviceId).remove().then(() => {
+            showToast('Device removed successfully', 'success');
+            addLog('device', `Device ${deviceId} removed`, 'warning');
+        }).catch(error => {
+            console.error('Error removing device:', error);
+            showToast('Error removing device: ' + error.message, 'danger');
+        });
     }
 }
 
-function refreshMedia() {
-    loadMedia();
-    showToast('Media refreshed', 'info');
+/**
+ * Logout function
+ */
+function logout() {
+    if (confirm('Are you sure you want to logout?')) {
+        auth.signOut().then(() => {
+            window.location.href = 'login.html';
+        }).catch(error => {
+            console.error('Logout error:', error);
+            showToast('Error logging out: ' + error.message, 'danger');
+        });
+    }
 }
 
-// Utility Functions
-function formatTimestamp(timestamp) {
-    if (!timestamp) return 'Never';
+/**
+ * Utility functions
+ */
+function updateConnectionStatus(status, message) {
+    const statusElement = $('#connectionStatus');
+    const statusIcon = $('#statusIcon');
+    const statusText = $('#statusText');
     
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
+    statusElement.removeClass('alert-info alert-success alert-danger');
     
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    switch (status) {
+        case 'connected':
+            statusElement.addClass('alert-success');
+            statusIcon.removeClass().addClass('fas fa-check-circle me-2 text-success');
+            break;
+        case 'error':
+            statusElement.addClass('alert-danger');
+            statusIcon.removeClass().addClass('fas fa-exclamation-circle me-2 text-danger');
+            break;
+        default:
+            statusElement.addClass('alert-info');
+            statusIcon.removeClass().addClass('fas fa-spinner fa-spin me-2');
+    }
     
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    statusText.text(message);
 }
 
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+function getLogIcon(type) {
+    const icons = {
+        device: 'fa-mobile-alt',
+        command: 'fa-paper-plane',
+        response: 'fa-reply',
+        system: 'fa-cog',
+        error: 'fa-exclamation-triangle'
+    };
+    return icons[type] || 'fa-info-circle';
+}
+
+function getLogColor(level) {
+    const colors = {
+        error: 'danger',
+        warning: 'warning',
+        info: 'info',
+        success: 'success'
+    };
+    return colors[level] || 'secondary';
+}
+
+function formatTimeAgo(timestamp) {
+    const now = Date.now();
+    const diffInSeconds = Math.floor((now - timestamp) / 1000);
+    
+    if (diffInSeconds < 60) {
+        return `${diffInSeconds}s ago`;
+    } else if (diffInSeconds < 3600) {
+        const minutes = Math.floor(diffInSeconds / 60);
+        return `${minutes}m ago`;
+    } else if (diffInSeconds < 86400) {
+        const hours = Math.floor(diffInSeconds / 3600);
+        return `${hours}h ago`;
+    } else {
+        const days = Math.floor(diffInSeconds / 86400);
+        return `${days}d ago`;
+    }
 }
 
 function showToast(message, type = 'info') {
-    const toast = document.getElementById('liveToast');
-    const toastMessage = document.getElementById('toastMessage');
+    const toastId = 'toast-' + Date.now();
+    const toast = $(`
+        <div class="toast align-items-center text-white bg-${type} border-0" role="alert" id="${toastId}">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'danger' ? 'fa-exclamation-circle' : 'fa-info-circle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `);
     
-    // Set message and style
-    toastMessage.textContent = message;
-    toast.className = `toast ${type}`;
+    $('#toastContainer').append(toast);
     
-    // Show toast
-    const bsToast = new bootstrap.Toast(toast);
+    const bsToast = new bootstrap.Toast(toast[0], {
+        autohide: true,
+        delay: 5000
+    });
+    
     bsToast.show();
+    
+    // Remove toast element after it's hidden
+    toast.on('hidden.bs.toast', function() {
+        toast.remove();
+    });
 }
 
-function refreshDevices() {
-    devicesRef.once('value');
-    showToast('Devices refreshed', 'info');
-}
+// Global functions for onclick handlers
+window.showPage = showPage;
+window.refreshDevices = refreshDevices;
+window.refreshLogs = refreshLogs;
+window.refreshMedia = refreshMedia;
+window.clearLogs = clearLogs;
+window.selectDeviceForCommand = selectDeviceForCommand;
+window.removeDevice = removeDevice;
+window.viewMedia = viewMedia;
+window.logout = logout;
