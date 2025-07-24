@@ -1,6 +1,8 @@
-# ERDMT Admin Android App
+# 🛡️ ERDMT - Enhanced Remote Device Management Tool
 
-This repository contains the source code for a complete WebView-based Android administration and monitoring system, featuring a modern Android app with proper permissions management, Firebase Cloud Messaging (FCM) integration, and a comprehensive web-based admin panel for remote device management.
+A comprehensive Firebase-based remote device management system featuring a static web admin panel and Android WebView application for authorized device monitoring and control.
+
+> **⚠️ IMPORTANT**: This application is for educational and authorized administrative purposes only. Use only on devices you own or have explicit permission to monitor.
 
 ## Features
 
